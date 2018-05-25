@@ -1,2 +1,3 @@
 # dummyHybridPrototype
-stupid dummy prototype for hybrid consensus (Pass and Shi) 
+stupid dummy prototype for hybrid consensus (Pass and Shi). https://eprint.iacr.org/2016/917.pdf
+
