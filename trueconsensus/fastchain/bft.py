@@ -19,10 +19,21 @@
 import os
 import uuid
 import random
+from db.backends.level import LevelDB
+
+from logging import ledger
+
+from collections import OrderedDict, \
+    namedtuple
+
+
+global LAMBDA
+LAMBDA = 0
 
 
 def generate_block(genesis=True):
     pass
+
 
 def generate_txns(R, l):
     """
@@ -32,19 +43,52 @@ def generate_txns(R, l):
     return (R, l, random.getrandbits(128))
     uuid.uuid4().hex
 
-def genkey():
-    return uuid.uuid4().hex
+
+# def genkey():
+#     return uuid.uuid4().hex
+
+
+class Node(object):
+    '''
+    @types:
+    committee member
+    committee non-member
+
+    @state:
+    corrup, honest(pre-corrupt, honest)
+
+    '''
+    R = 0
+    LOGs = defaultdict(list)
+    LOG = defaultdict()
+    csize = LAMBDA
+
+    def __init__(self, id=None, type=None):
+        self.NodeId = id
+        self._type = 'BFTmember'
+        self.new_row = namedtuple('row', ['R','l','txn'])
+        self.nonce = 0
+
+    def log_to_snailchain(self):
+        return
+
 
 class ViewChangeInit(object):
     '''
     '''
+
     def __init__(self):
         pass
+
+
+def LedgerLog(object):
+    pass
 
 
 class BFTcommittee(object):
     '''
     '''
+
     def __init__(self):
         self.nodes = []
         self.view = 0
@@ -54,3 +98,18 @@ class BFTcommittee(object):
         complains to snailchain
         """
         self.ViewChangeInit(self.nodes)
+
+    def sign_transaction(self):
+        """
+        """
+        pass
+
+    def log_to_slowchain(self):
+        """
+        """
+        pass
+
+    def fetch_LOG(self):
+        """
+        """
+        pass

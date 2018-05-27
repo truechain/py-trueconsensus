@@ -13,3 +13,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import os
+# from subprocess import check_output
+
+MAX_FAIL = 1
+N = 2  # the number of parties excluding the client
+basePort = 49505
+
+host_file_content = open(os.path.expanduser('~')+'/hosts', 'r').read()
+IP_LIST = [l.strip() for l in host_file_content.split('\n') if l]
+total = len(IP_LIST)
+
+# We reserve the last IP as the client
+RL = [(l, basePort+i) for i, l in enumerate(IP_LIST[:N])]
+
+TOR_SOCKSPORT = range(9050, 9150)
+
+ID = 0  # Now ID is deprecated
+N = len(RL)
+
+client = ((IP_LIST[N], basePort+N))
+
+# KEY DIRECTORY
+KD = os.getcwd() + "/keys"
+print(KD)
