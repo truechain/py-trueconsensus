@@ -1,5 +1,8 @@
 # Prototype Hybrid Consensus
-prototype for hybrid consensus (Pass and Shi). https://eprint.iacr.org/2016/917.pdf
+prototype for TrueChain hybrid consensus
+Refer to:
+https://arxiv.org/abs/1805.01457
+https://eprint.iacr.org/2016/917.pdf
 
 
 ### Parameterized by following..
