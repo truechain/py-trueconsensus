@@ -1,0 +1,15 @@
+# pbft core configurations
+# name: pbft base configuration
+nodes:
+  client_id: 0
+  network_config_file: ~/hosts
+  total: 10 #excluding base client
+general:
+  max_fail: 1
+  base_port: 49500
+  tor_socksport_range: 9050,9150
+
+# RL = [(l, basePort+i) for i, l in enumerate(IP_LIST[:N])]
+# We reserve the last IP as the client
+# KD = os.getcwd() + "/keys"
+# client = ((IP_LIST[N], basePort+N))

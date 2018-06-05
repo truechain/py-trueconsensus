@@ -1,0 +1,21 @@
+package request;
+
+message Request {
+    message Inner {
+        required int32 id = 1;
+        required int32 seq = 2;
+        required int32 view = 3;
+        required string type = 4;
+        required bytes msg = 5;
+        optional int32 timestamp = 6;
+    }
+
+    required Inner inner = 1;
+    required bytes dig = 2;
+    required bytes sig = 3;
+    optional bytes outer = 4;
+}
+
+message History {
+    repeated Request req = 1;
+}
