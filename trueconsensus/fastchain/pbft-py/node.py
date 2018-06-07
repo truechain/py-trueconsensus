@@ -15,7 +15,7 @@ from threading import Timer, Thread, Lock, Condition
 
 import sig
 import bank
-import ecdsa_sig
+from ecdsa_sig import get_asymm_key
 import request_pb2
 import proto_message as message
 from config import config_general, \
@@ -140,7 +140,7 @@ class node:
         self.prepared = {}
         self.active = {}      # dictionary for all currently active requests
         self.view_dict = {}   # [view num] -> [list of ids]
-        self.key_dict = {}
+        # self.key_dict = {}
         self.replica_map = {}
         self.bank = bank.bank(id, 1000)
 
@@ -266,7 +266,8 @@ class node:
 
     # type, seq, message, (optional) tag request
     def create_request(self, req_type, seq, msg, outer_req=None):
-        key = self.key_dict[self.id]
+        import pdb; pdb.set_trace()
+        key = get_asymm_key(self.id, ktype="sign")
         m = message.add_sig(key, self.id, seq, self.view, req_type, msg)
         if outer_req:
             m.outer = outer_req.SerializeToString()
@@ -324,7 +325,7 @@ class node:
         client_req,t,fd = self.active[dig]
         t.cancel()
 
-        key = self.key_dict[self.id]
+        key = get_asymm_key(self.id, ktype="sign")
         #time.sleep(1)
         #rc = ecdsa_sig.verify(self.ecdsa_key, self.hello_sig, "Hello world!")
         #cond.acquire()
@@ -546,7 +547,7 @@ class node:
                 client_req = request_pb2.Request()
                 client_req.ParseFromString(req.outer)
                 record_pbft(self.debuglog, client_req)
-                client_key = self.key_dict[client_req.inner.id]
+                client_key = get_asymm_key(client_req.inner.id, ktype="sign")
                 client_req = message.check(client_key, client_req)
                 if client_req == None or req.inner.msg != client_req.dig:
                     print("FAILED PRPR OUTER SIGCHECK")
@@ -630,14 +631,14 @@ class node:
             if (not k1 in vpre_dict):
                 return False,0
             dig = vpre_dict[k1].inner.msg
-            key = self.key_dict[vpre_dict[k1].inner.id]
+            key = get_asymm_key(vpre_dict[k1].inner.id, ktype="sign")
             r = message.check(key, vpre_dict[k1])
             if r == None:
                 return False,0
 
             for k2,v2 in v1.iteritems():
                 # check sigs
-                key = self.key_dict[v2.inner.id]
+                key = get_asymm_key(v2.inner.id, ktype="sign")
                 r = message.check(key,v2)
                 if r == None:
                     return False,0
@@ -700,7 +701,7 @@ class node:
                 r2 = request_pb2.Request()
                 r2.ParseFromString(m[4:size+4])
                 record_pbft(self.debuglog, r2)
-                key = self.key_dict[r2.inner.id]
+                key = get_asymm_key(r2.inner.id, ktype="sign")
                 r2 = message.check(key,r2)
                 if r2 == None:
                     print("FAILED SIG CHECK IN VIEW CHANGE")
@@ -769,7 +770,7 @@ class node:
 
     def nvprocess_prpr(self, prpr_list):
         for r in prpr_list:
-            key = self.key_dict[r.inner.id]
+            key = get_asymm_key(r.inner.id, ktype="sign")
             m = message.check(key, r)
             if m == None:
                 return False
@@ -784,7 +785,7 @@ class node:
     #TODO: check each message for correctness?  Shouldn't be necessary...
     def nvprocess_view(self, vchange_list):
         for r in vchange_list:
-            key = self.key_dict[r.inner.id]
+            key = get_asymm_key(r.inner.id, ktype="sign")
             m = message.check(key, r)
             if m == None:
                 return False
@@ -806,7 +807,7 @@ class node:
                 r2 = request_pb2.Request()
                 r2.ParseFromString(m[4:size+4])
                 record_pbft(self.debuglog, r2)
-                key = self.key_dict[r2.inner.id]
+                key = get_asymm_key(r2.inner.id, ktype="sign")
                 r2 = message.check(key,r2)
                 if r2 == None:
                     print("FAILED SIG CHECK IN NEW VIEW")
@@ -865,7 +866,7 @@ class node:
             req = request_pb2.Request()
             req.ParseFromString(request_bytes)
             record_pbft(self.debuglog, req)
-            key = self.key_dict[req.inner.id]
+            key = get_asymm_key(req.inner.id, ktype="sign")
             req = message.check(key,req)
             if req == None:
                 print("FAILED SIG CHECK SOMEWHERE")

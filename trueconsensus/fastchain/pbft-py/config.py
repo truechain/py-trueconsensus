@@ -101,7 +101,12 @@ KD = config_general.get("general", "pem_keystore_path")
 # import pdb; pdb.set_trace()
 basePort = config_yaml["general"]["base_port"]
 N = config_yaml['nodes']['total']
+
 client_id = config_yaml["nodes"]["client_id"]
+
+# replica list
 RL = [(l, basePort+i) for i, l in enumerate(IP_LIST[:client_id])]
 # We reserve the last IP as the client
 client_address = ((IP_LIST[client_id], basePort+client_id))
+
+threading_enabled = False

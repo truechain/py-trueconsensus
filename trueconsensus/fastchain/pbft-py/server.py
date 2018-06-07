@@ -7,13 +7,13 @@ import signal
 import time
 import signal
 import logging
-from threading import Thread
 from random import random
 from argparse import RawTextHelpFormatter, \
                 ArgumentParser
 
 import node
 from config import config_yaml, \
+    threading_enabled, \
     N
 
 
@@ -72,54 +72,41 @@ if __name__ == "__main__":
     # import pdb; pdb.set_trace()
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+    
+    if threading_enabled:
+        from threading import Thread
 
-    threads = []
+        threads = []
+        def run(ID):
+            sys.stdout.write("run started\n")
+            sys.stdout.flush()
 
-    def run(ID):
-        sys.stdout.write("run started\n")
+            # while not stop_requested:
+            #     simple_target(a)
+            #     time.sleep(1)
+
+            n = node.node(ID, 0, N)
+            # n.init_keys(N)
+            n.init_replica_map()
+            n.server_loop()
+
+            sys.stdout.write("run exited\n")
+            sys.stdout.flush()
+
+        # N = config_yaml['nodes']['total']
+        for i in range(N):
+            thread = Thread(target=run, args=[i])
+            thread.start()
+            threads.append(thread)
+
+        for thread in threads:
+            thread.join()
+
+        sys.stdout.write("join completed\n")
         sys.stdout.flush()
 
-        # while not stop_requested:
-        #     simple_target(a)
-        #     time.sleep(1)
-
-        n = node.node(ID, 0, N)
+    else:
+        n = node.node(0, 0, N)
         # n.init_keys(N)
         n.init_replica_map()
         n.server_loop()
-
-        sys.stdout.write("run exited\n")
-        sys.stdout.flush()
-
-    # N = config_yaml['nodes']['total']
-    for i in range(N):
-        thread = Thread(target=run, args=[i])
-        thread.start()
-        threads.append(thread)
-
-    for thread in threads:
-        thread.join()
-
-    sys.stdout.write("join completed\n")
-    sys.stdout.flush()
-#
-#
-#
-# # This Replica ID
-# ID = 0
-#
-# # Number of replicas
-# N = 4
-#
-# # Number of failures we can tolerate
-# MAX_FAIL = 1
-#
-# # REPLICA LIST
-# # IP, port
-# RL = []
-# RL.append(("127.0.0.1", 8001))
-# RL.append(("127.0.0.1", 8002))
-# RL.append(("127.0.0.1", 8003))
-# RL.append(("127.0.0.1", 8004))
-#
-# client = (("127.0.0.1", 8101))
