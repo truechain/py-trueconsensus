@@ -5,7 +5,7 @@ import sys
 import yaml
 import signal
 import time
-import config
+from config import  *
 import signal
 import logging
 from threading import Thread
@@ -99,28 +99,24 @@ if __name__ == "__main__":
 
     sys.stdout.write("join completed\n")
     sys.stdout.flush()
-
-
-
-# This Replica ID
-ID = 0
-
-# Number of replicas
-N = 4
-
-# Number of failures we can tolerate
-MAX_FAIL = 1
-
-# REPLICA LIST
-# IP, port
-RL = []
-RL.append(("127.0.0.1", 8001))
-RL.append(("127.0.0.1", 8002))
-RL.append(("127.0.0.1", 8003))
-RL.append(("127.0.0.1", 8004))
-
-client = (("127.0.0.1", 8101))
-
-# KEY DIRECTORY
-KD = os.getcwd() + "/keys"
-print KD
+#
+#
+#
+# # This Replica ID
+# ID = 0
+#
+# # Number of replicas
+# N = 4
+#
+# # Number of failures we can tolerate
+# MAX_FAIL = 1
+#
+# # REPLICA LIST
+# # IP, port
+# RL = []
+# RL.append(("127.0.0.1", 8001))
+# RL.append(("127.0.0.1", 8002))
+# RL.append(("127.0.0.1", 8003))
+# RL.append(("127.0.0.1", 8004))
+#
+# client = (("127.0.0.1", 8101))

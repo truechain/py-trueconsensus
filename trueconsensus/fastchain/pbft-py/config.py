@@ -84,8 +84,9 @@ _logger.addHandler(handler)
 
 print("Storing logs to file: %s" % FNAME)
 
-IP_LIST = [l.strip() for l in open(os.path.expanduser('~')+'/hosts','r').read().split('\n') if l]
-total = len(IP_LIST)
-
-
 config_yaml = load_yaml_config(CFG_YAML_PATH)
+
+IP_LIST = [l.strip() for l in open(os.path.expanduser('~')+'/hosts','r').read().split('\n') if l]
+# total = len(IP_LIST)
+
+KD = config_general.get("general", "pem_keystore_path")

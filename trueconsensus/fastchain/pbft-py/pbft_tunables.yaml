@@ -2,8 +2,7 @@
 # name: pbft base configuration
 nodes:
   client_id: 0
-  network_config_file: ~/hosts
-  total: 10 #excluding base client
+  total: 5 #excluding base client
 general:
   max_fail: 1
   base_port: 49500
