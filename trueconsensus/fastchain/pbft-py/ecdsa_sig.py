@@ -7,12 +7,18 @@ import ecdsa
 import config
 
 C = ecdsa.NIST256p
-SIG_SIZE = 64
+SIG_SIZE = 256
 HASH_SIZE = 32
+# MAC_SIZE = 32
 
 ASYMM_FILE_FORMATS = {
     "sign": ".pem",
     "verify": ".pub"
+}
+
+ASYMM_FUNC_MAP = {
+    "sign": ecdsa.SigningKey.from_pem,
+    "verify": ecdsa.VerifyingKey.from_pem
 }
 
 
@@ -37,12 +43,12 @@ def verify(key, sig, message):
 
 def get_key_path(i, ktype):
     try:
-        KEY_NAME = str(i) + ASYMM_FILE_FORMATS[ktype]
-        print("KPATH - GET %s -- %s", ktype, KEY_NAME)
-        return os.path.join(config.KD, ktype, KEY_NAME)
+        KEY_NAME = ktype + str(i) + ASYMM_FILE_FORMATS[ktype]
+        print("KPATH - GET PATH - %s -- %s" % (ktype, KEY_NAME))
+        return os.path.join(config.KD, KEY_NAME)
     except Exception as E:
         quit(E)
-        raise
+        # raise
 
 
 def write_new_keys(n):
@@ -64,7 +70,7 @@ def get_asymm_key(i, ktype=None):
         print("can't find key file: ", kpath)
         sys.exit(0)
     key_pem = open(kpath, 'rb').read()
-    return ecdsa.SigningKey.from_pem(key_pem)
+    return ASYMM_FUNC_MAP[ktype](key_pem)
 
 #
 # def get_verifying_key(i):

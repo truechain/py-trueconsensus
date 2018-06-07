@@ -1,19 +1,32 @@
-import socket, select, time, sys, struct, logging, errno, signal, os, socks
+import os
+import sys
+import time
+import errno
+import socks
+import struct
+import socket
+import select
+import signal
+import logging
+import traceback
+import threading
 from Crypto.Hash import SHA256
 from threading import Timer, Thread, Lock, Condition
-import config, proto_message as message, sig
-import request_pb2
+
+import sig
 import bank
-import traceback
 import ecdsa_sig
-import threading
+import request_pb2
+import proto_message as message
+from config import config_general
 
 BUF_SIZE = 4096 * 8 * 8
-recv_mask =  select.EPOLLIN | select.EPOLLPRI | select.EPOLLRDNORM
-send_mask =  select.EPOLLOUT | select.EPOLLWRNORM
+recv_mask = select.EPOLLIN | select.EPOLLPRI | select.EPOLLRDNORM
+send_mask = select.EPOLLOUT | select.EPOLLWRNORM
 
 lock = Lock()
 cond = Condition(lock)
+
 
 class exec_thread(Thread):
     def __init__(self, node, req):
@@ -23,8 +36,9 @@ class exec_thread(Thread):
 
     def run(self):
         self.node.execute(self.req)
-        #print(self.req.inner.seq)
+        # print(self.req.inner.seq)
         return
+
 
 class req_counter:
     def __init__(self):
@@ -32,26 +46,30 @@ class req_counter:
         self.prepared = False
         self.req = None
 
+
 def serialize(req):
     size = req.ByteSize()
     b = struct.pack("!I", size)
     return b + req.SerializeToString()
 
+
 def record(file, message):
     file.write(str(time.time()) + "\t" + message + "\n")
+
 
 def record_pbft(file, request):
     msg = request.inner.type + " " + str(request.inner.seq) + " received from " + str(request.inner.id) + " in view " + str(request.inner.view)
     record(file, msg)
+
 
 class node:
     def debug_print_bank(self, signum, flag):
         print(len(self.waiting))
         print("last executed: ", self.last_executed)
         self.bank.print_balances()
-        #m = self.create_request("REQU", 0, "replica " + str(self.id) + " going down", 0)
-        #self.broadcast_to_nodes(m)
-        #for i,s in self.replica_map.iteritems():
+        # m = self.create_request("REQU", 0, "replica " + str(self.id) + " going down", 0)
+        # self.broadcast_to_nodes(m)
+        # for i,s in self.replica_map.iteritems():
         #    try:
         #        s.send(serialize(m))
         #        print("sent to ", i)
@@ -65,80 +83,95 @@ class node:
     def __init__(self, id, view, N, max_requests=None):
         self.max_requests = max_requests
         self.kill_flag = False
-        self.ecdsa_key = ecdsa_sig.get_verifying_key(0)
+        self.ecdsa_key = ecdsa_sig.get_asymm_key(0, "verify")
         f = open("hello_0.dat", 'r')
         self.hello_sig = f.read()
         f.close()
         self.connections = 0
         signal.signal(signal.SIGINT, self.debug_print_bank)
-        self.id = id                            # id
-        self.view = view                        # current view number
-        self.view_active = True                 # If we have majority agreement on view number
-        self.N = N                              # total number of replicas
-        self.f = int((N-1)/3)                   # number of failues tolerated
-        self.low_bound = 0                      # lower bound for acceptable sequence numbers
-        self.high_bound = 0                     # upper bound for acceptable sequence numbers
+        self.id = id             # id
+        self.view = view         # current view number
+        self.view_active = True  # If we have majority agreement on view number
+        self.N = N               # total number of replicas
+        self.f = int((N-1)/3)    # number of failues tolerated
+        self.low_bound = 0       # lower bound for acceptable sequence numbers
+        self.high_bound = 0      # upper bound for acceptable sequence numbers
         self.primary = view % N
-        self.seq = 0                            # next available sequence number if this node is primary
+        self.seq = 0   # next available sequence number if this node is primary
         self.last_executed = 0
         self.last_stable_checkpoint = 0
         self.checkpoint_proof = []
         self.checkpoint_interval = 100
-        self.vmin = 0                           # used for view changes
+        self.vmin = 0            # used for view changes
         self.vmax = 0
         self.waiting = {}
-        self.timeout = 10*60                       # time interval in seconds before we trigger a view change
+        self.timeout = 10*60     # time interval (seconds), before view change
         self.lock = Lock()
-        #hack
+        # hack
         self.clientbuff = ""
         self.clientlock = Lock()
 
-        self.fdmap = {}                         # file descriptor to socket mapping
-        self.buffmap = {}                       # file descriptor to incomming (recv) buffer mapping
+        self.fdmap = {}    # file descriptor to socket mapping
+        self.buffmap = {}  # file descriptor to incomming (recv) buffer mapping
         self.outbuffmap = {}
         self.p = select.epoll()                 # epoll object
-        self.node_message_log = {"PRPR" : {},
-                                 "PREP" : {},
-                                 "COMM" : {},
-                                 "INIT" : {},
-                                 "REQU" : {},
-                                 "VCHA" : {},
-                                 "NEVW" : {},
-                                 "CHKP" : {},
-        }              # message log for node communication related to the PBFT protocol: [type][seq][id] -> request
-        self.client_message_log = {}            # message log for client communication (requests) [client id][timestamp] -> request
-        self.prep_dict = {}                     # dictionary for prepare messages (digest -> (number prepares received, 'prepared'[T/F])
+        # message log for node communication related to the
+        # PBFT protocol: [type][seq][id] -> request
+        self.node_message_log = {
+            "PRPR": {},
+            "PREP": {},
+            "COMM": {},
+            "INIT": {},
+            "REQU": {},
+            "VCHA": {},
+            "NEVW": {},
+            "CHKP": {},
+        }
+        # message log for client communication (requests)
+        # [client id][timestamp] -> request
+        self.client_message_log = {}
+        # dictionary for prepare messages
+        # (digest -> (number prepares received, 'prepared'[T/F])
+        self.prep_dict = {}
         self.comm_dict = {}
-        self.prepared = {}                      # dictionary for all requests that have prepared (seq -> request)
-        self.active = {}                        # dictionary for all currently active requests
-        self.view_dict = {}                     # [view num] -> [list of ids]
+        # dictionary for all requests that have prepared (seq -> request)
+        self.prepared = {}
+        self.active = {}      # dictionary for all currently active requests
+        self.view_dict = {}   # [view num] -> [list of ids]
         self.key_dict = {}
         self.replica_map = {}
         self.bank = bank.bank(id, 1000)
 
-        self.request_types = {"REQU" : self.process_client_request,
-                              "PRPR" : self.process_preprepare,
-                              "PREP" : self.process_prepare,
-                              "COMM" : self.process_commit,
-                              "INIT" : self.process_init,
-                              "VCHA" : self.process_view_change,
-                              "NEVW" : self.process_new_view,
-                              "CHKP" : self.process_checkpoint,
+        self.request_types = {
+            "REQU": self.process_client_request,
+            "PRPR": self.process_preprepare,
+            "PREP": self.process_prepare,
+            "COMM": self.process_commit,
+            "INIT": self.process_init,
+            "VCHA": self.process_view_change,
+            "NEVW": self.process_new_view,
+            "CHKP": self.process_checkpoint,
         }
-
-        self.commitlog = open("replica" + str(self.id) + "_commits.txt", 'wb',1)      # log for executed commands
-        self.debuglog = open("replica" + str(self.id) + "_log.txt", 'wb', 1)           # log for debug messages
+        # log for executed commands
+        COMMIT_LOG_FILE = os.path.join(config_general.get("log", "root_folder"),
+                                       "replica%s_commits.txt" % self.id)
+        self.commitlog = open(COMMIT_LOG_FILE, 'wb', 1)
+        # log for debug messages
+        self.debuglog = open("replica" + str(self.id) + "_log.txt", 'wb', 1)
 
     def reset_message_log(self):
-        self.node_message_log = {"PRPR" : {},
-                                 "PREP" : {},
-                                 "COMM" : {},
-                                 "INIT" : {},
-                                 "REQU" : {},
-                                 "VCHA" : {},
-                                 "NEVW" : {},
-                                 "CHKP" : {},
-        }              # message log for node communication related to the PBFT protocol: [type][seq][id] -> request
+        # message log for node communication related to the PBFT protocol:
+        # [type][seq][id] -> request
+        self.node_message_log = {
+            "PRPR": {},
+            "PREP": {},
+            "COMM": {},
+            "INIT": {},
+            "REQU": {},
+            "VCHA": {},
+            "NEVW": {},
+            "CHKP": {},
+        }
         self.prep_dict = {}
         self.comm_dict = {}
     # TODO: include a failed send buffer per socket, retry later

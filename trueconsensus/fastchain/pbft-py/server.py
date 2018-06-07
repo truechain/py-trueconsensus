@@ -5,7 +5,6 @@ import sys
 import yaml
 import signal
 import time
-from config import  *
 import signal
 import logging
 from threading import Thread
@@ -14,6 +13,7 @@ from argparse import RawTextHelpFormatter, \
                 ArgumentParser
 
 import node
+from config import config_yaml
 
 
 parser = ArgumentParser(formatter_class=RawTextHelpFormatter,
@@ -37,9 +37,11 @@ def signal_handler(event, frame):
 def pbft_usage():
     parser.add_argument("-n", "--nodes", dest="node_count", action='store',
                         help="# of PBFT nodes to be launched")
-    parser.add_argument("-id", "--node-id", dest="node_id", action='store_true',
+    parser.add_argument("-id", "--node-id", dest="node_id",
+                        action='store_true',
                         help="Gather present satellite/capsule tunings")
-    parser.add_argument("-ts", "--tune-settings", dest="tune", action='store_true',
+    parser.add_argument("-ts", "--tune-settings", dest="tune",
+                        action='store_true',
                         help="Tune as per performance recommendations")
 
 

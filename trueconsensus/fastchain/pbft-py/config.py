@@ -1,12 +1,12 @@
 import os
-from subprocess import check_output
 
 import yaml
 import logging
 import configparser
+# from subprocess import check_output
+# from pykwalify import core as pykwalify_core
+# from pykwalify import errors as pykwalify_errors
 from logging.handlers import RotatingFileHandler
-from pykwalify import core as pykwalify_core
-from pykwalify import errors as pykwalify_errors
 
 from local_config import CFG_YAML_PATH, \
     CFG_GENERAL_PATH
@@ -39,34 +39,36 @@ def load_yaml_config(path, no_val=False):
     # _logger.info("Config {} validated".format(path))
     return pbft_config
 
-
-def _validate_yaml(schema, config):
-    """Raises exception if config is invalid.
-    :param schema: The schema to validate with (pbft, pow, hybrid...)
-    :param config: Loaded yaml to validate
-    """
-    check = pykwalify_core.Core(
-        source_data=config, schema_files=["{}/{}.yml".format(conf_schema_path, schema)])
-    try:
-        check.validate(raise_exception=True)
-    except pykwalify_errors.SchemaError as e:
-        _logger.error("Schema validation failed")
-        raise Exception("File does not conform to {} schema: {}".format(schema, e))
+#
+# def _validate_yaml(schema, config):
+#     """Raises exception if config is invalid.
+#     :param schema: The schema to validate with (pbft, pow, hybrid...)
+#     :param config: Loaded yaml to validate
+#     """
+#     check = pykwalify_core.Core(
+#         source_data=config,
+#         schema_files=["{}/{}.yml".format(conf_schema_path, schema)])
+#     try:
+#         check.validate(raise_exception=True)
+#     except pykwalify_errors.SchemaError as e:
+#         _logger.error("Schema validation failed")
+#         raise Exception("File does not conform to {} schema: {}".format(schema, e))
 
 
 config_general = load_config(CFG_GENERAL_PATH)
 
+LOG_ROOT = config_general.get("log", "root_folder")
 # import pdb; pdb.set_trace()
-FNAME = config_general.get('log','pbft_log_file')
-FSIZE = int(config_general.get('log',"pbft_log_file_size"))
+FNAME = config_general.get("log", "server_logfile")
+FSIZE = int(config_general.get("log", "max_log_size"))
 
 try:
-    if not os.path.exists(os.path.dirname(FNAME)):
-        os.makedirs(os.path.dirname(FNAME))
+    if not os.path.exists(LOG_ROOT):
+        os.makedirs(LOG_ROOT)
 except PermissionError:
-    quit("[Permission Denied] during creation of log filepath: %s" % FNAME)
+    quit("[Permission Denied] during creation of log file dir: %s" % LOG_ROOT)
 except Exception as E:
-    quit("Error: [%s] - Couldn't create log filepath: %s" % (E, FNAME))
+    quit("Error: [%s] - Couldn't create log file dir: %s" % (E, LOG_ROOT))
 
 FMT = "[%(asctime)s] [%(levelname)s ] " + \
       "[%(filename)s:%(lineno)d:%(funcName)s()] - %(message)s"
@@ -74,7 +76,11 @@ FMT = "[%(asctime)s] [%(levelname)s ] " + \
 _logger = logging.getLogger(__name__)
 
 formatter = logging.Formatter(FMT)
-handler = RotatingFileHandler(FNAME, maxBytes=FSIZE, backupCount=1)
+handler = RotatingFileHandler(
+    os.path.join(LOG_ROOT, FNAME),
+    maxBytes=FSIZE,
+    backupCount=1
+)
 handler.setFormatter(formatter)
 _logger.root.level = logging.DEBUG
 _logger.addHandler(handler)
