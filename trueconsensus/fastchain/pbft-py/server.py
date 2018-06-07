@@ -10,9 +10,6 @@ import signal
 import logging
 from threading import Thread
 from random import random
-from logging.handlers import RotatingFileHandler
-from pykwalify import core as pykwalify_core
-from pykwalify import errors as pykwalify_errors
 from argparse import RawTextHelpFormatter, \
                 ArgumentParser
 
@@ -22,7 +19,7 @@ import node
 parser = ArgumentParser(formatter_class=RawTextHelpFormatter,
                         description="""PBFT standalone server demo""")
 
-stop_requested = False    
+stop_requested = False
 
 
 def signal_handler(event, frame):
@@ -56,7 +53,7 @@ def pbft_usage():
 #     while not stop_requested:
 #         simple_target(a)
 #         time.sleep(1)
-        
+
 #     sys.stdout.write("run exited\n")
 #     sys.stdout.flush()
 
@@ -75,19 +72,19 @@ if __name__ == "__main__":
 
     threads = []
 
-    def run(ID)
+    def run(ID):
         sys.stdout.write("run started\n")
         sys.stdout.flush()
 
         # while not stop_requested:
         #     simple_target(a)
         #     time.sleep(1)
-        
-        n = node.node(ID, 0, N)    
+
+        n = node.node(ID, 0, N)
         # n.init_keys(N)
         n.init_replica_map()
         n.server_loop()
-        
+
         sys.stdout.write("run exited\n")
         sys.stdout.flush()
 
@@ -101,5 +98,29 @@ if __name__ == "__main__":
         thread.join()
 
     sys.stdout.write("join completed\n")
-    sys.stdout.flush()    
-    
+    sys.stdout.flush()
+
+
+
+# This Replica ID
+ID = 0
+
+# Number of replicas
+N = 4
+
+# Number of failures we can tolerate
+MAX_FAIL = 1
+
+# REPLICA LIST
+# IP, port
+RL = []
+RL.append(("127.0.0.1", 8001))
+RL.append(("127.0.0.1", 8002))
+RL.append(("127.0.0.1", 8003))
+RL.append(("127.0.0.1", 8004))
+
+client = (("127.0.0.1", 8101))
+
+# KEY DIRECTORY
+KD = os.getcwd() + "/keys"
+print KD

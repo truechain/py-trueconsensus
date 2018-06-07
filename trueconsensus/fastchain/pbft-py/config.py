@@ -4,13 +4,12 @@ from subprocess import check_output
 import yaml
 import logging
 import configparser
-
+from logging.handlers import RotatingFileHandler
 from pykwalify import core as pykwalify_core
 from pykwalify import errors as pykwalify_errors
 
-
-IP_LIST = [l.strip() for l in open(os.path.expanduser('~')+'/hosts','r').read().split('\n') if l]
-total = len(IP_LIST)
+from local_config import CFG_YAML_PATH, \
+    CFG_GENERAL_PATH
 
 
 def load_config(path, no_val=False):
@@ -32,6 +31,7 @@ def load_yaml_config(path, no_val=False):
     """
     with open(path, "r") as config_file:
         pbft_config = yaml.safe_load(config_file)
+
     _logger.debug("PBFT config {} yaml loaded".format(path))
 
     # # Validate base config for Browbeat format
@@ -54,9 +54,7 @@ def _validate_yaml(schema, config):
         raise Exception("File does not conform to {} schema: {}".format(schema, e))
 
 
-config_yaml = config.load_yaml_config("pbft_tunables.yaml")
-config_general = config.load_config("pbft_logistics.cfg")
-
+config_general = load_config(CFG_GENERAL_PATH)
 
 # import pdb; pdb.set_trace()
 FNAME = config_general.get('log','pbft_log_file')
@@ -85,3 +83,9 @@ _logger.addHandler(handler)
 # _logger = logging.getLogger("pbftx.config")
 
 print("Storing logs to file: %s" % FNAME)
+
+IP_LIST = [l.strip() for l in open(os.path.expanduser('~')+'/hosts','r').read().split('\n') if l]
+total = len(IP_LIST)
+
+
+config_yaml = load_yaml_config(CFG_YAML_PATH)

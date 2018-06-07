@@ -1,23 +1,7 @@
 import os
-# This Replica ID
-ID = 0
 
-# Number of replicas
-N = 4
+# CFG_YAML_PATH = "/etc/pbft_tunables.yaml"
+CFG_YAML_PATH = os.path.join(os.path.expanduser('~'), "pbft_tunables.yaml")
 
-# Number of failures we can tolerate
-MAX_FAIL = 1
-
-# REPLICA LIST
-# IP, port
-RL = []
-RL.append(("127.0.0.1", 8001))
-RL.append(("127.0.0.1", 8002))
-RL.append(("127.0.0.1", 8003))
-RL.append(("127.0.0.1", 8004))
-
-client = (("127.0.0.1", 8101))
-
-# KEY DIRECTORY
-KD = os.getcwd() + "/keys"
-print KD
+# CFG_GENERAL_PATH = "/etc/pbft_logistics.cfg"
+CFG_GENERAL_PATH = os.path.join(os.path.expanduser('~'), "pbft_logistics.cfg")
