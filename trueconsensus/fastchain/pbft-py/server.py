@@ -13,7 +13,8 @@ from argparse import RawTextHelpFormatter, \
                 ArgumentParser
 
 import node
-from config import config_yaml
+from config import config_yaml, \
+    N
 
 
 parser = ArgumentParser(formatter_class=RawTextHelpFormatter,
@@ -90,7 +91,7 @@ if __name__ == "__main__":
         sys.stdout.write("run exited\n")
         sys.stdout.flush()
 
-    N = config_yaml['nodes']['total']
+    # N = config_yaml['nodes']['total']
     for i in range(N):
         thread = Thread(target=run, args=[i])
         thread.start()

@@ -18,7 +18,9 @@ import bank
 import ecdsa_sig
 import request_pb2
 import proto_message as message
-from config import config_general
+from config import config_general, \
+    RL, \
+    client_address
 
 BUF_SIZE = 4096 * 8 * 8
 recv_mask = select.EPOLLIN | select.EPOLLPRI | select.EPOLLRDNORM
@@ -83,12 +85,12 @@ class node:
     def __init__(self, id, view, N, max_requests=None):
         self.max_requests = max_requests
         self.kill_flag = False
-        self.ecdsa_key = ecdsa_sig.get_asymm_key(0, "verify")
-        f = open("hello_0.dat", 'r')
-        self.hello_sig = f.read()
-        f.close()
+        # self.ecdsa_key = ecdsa_sig.get_asymm_key(0, "verify")
+        # f = open("hello_0.dat", 'r')
+        # self.hello_sig = f.read()
+        # f.close()
         self.connections = 0
-        signal.signal(signal.SIGINT, self.debug_print_bank)
+        # signal.signal(signal.SIGINT, self.debug_print_bank)
         self.id = id             # id
         self.view = view         # current view number
         self.view_active = True  # If we have majority agreement on view number
@@ -206,7 +208,7 @@ class node:
     def init_replica_map(self):
         host = socket.gethostname()
         # import pdb; pdb.set_trace()
-        ip, port = config.RL[self.id-1]
+        ip, port = RL[self.id-1]
         s = socket.socket()
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(('0.0.0.0', port))  # on EC2 we cannot directly bind on public addr
@@ -224,8 +226,8 @@ class node:
             if i == self.id:
                 continue
             # r = socket.socket()
-            remote_ip, remote_port = config.RL[i]
-            print("trying to connect", config.RL)
+            remote_ip, remote_port = RL[i]
+            print("trying to connect", RL)
             retry = True
             count = 0
             while retry:  # re-trying will not cause a deadlock.
@@ -263,7 +265,7 @@ class node:
     #         self.key_dict[i] = key
 
     # type, seq, message, (optional) tag request
-    def create_request(self, req_type, seq, msg, outer_req = None):
+    def create_request(self, req_type, seq, msg, outer_req=None):
         key = self.key_dict[self.id]
         m = message.add_sig(key, self.id, seq, self.view, req_type, msg)
         if outer_req:
@@ -299,7 +301,7 @@ class node:
         os.kill(os.getpid(), signal.SIGINT)
 
     def try_client(self):
-        ip, port = config.client
+        ip, port = client_address
         while True:
             time.sleep(5);
             self.clientlock.acquire()
@@ -343,7 +345,7 @@ class node:
         client_sock = socks.socksocket() # socket.socket()
         # import pdb; pdb.set_trace()
         client_sock.setproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", config.TOR_SOCKSPORT[self.id], True)
-        ip, port = config.client
+        ip, port = client_address
         #TODO: hack
         retry = True
         #while retry:
@@ -894,7 +896,7 @@ class node:
     def server_loop(self):
         counter = 0
         #host = socket.gethostname()
-        #ip,port = config.RL[self.id]
+        #ip,port = RL[self.id]
         #s = socket.socket()
         #s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         #s.bind(('0.0.0.0', port))  # on EC2 we cannot directly bind on public addr

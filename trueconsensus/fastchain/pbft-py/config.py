@@ -9,7 +9,8 @@ import configparser
 from logging.handlers import RotatingFileHandler
 
 from local_config import CFG_YAML_PATH, \
-    CFG_GENERAL_PATH
+    CFG_GENERAL_PATH, \
+    PEER_NETWORK_FILE
 
 
 def load_config(path, no_val=False):
@@ -92,7 +93,15 @@ print("Storing logs to file: %s" % FNAME)
 
 config_yaml = load_yaml_config(CFG_YAML_PATH)
 
-IP_LIST = [l.strip() for l in open(os.path.expanduser('~')+'/hosts','r').read().split('\n') if l]
+IP_LIST = [l.strip() for l in open(PEER_NETWORK_FILE, 'r').read().split('\n') if l]
 # total = len(IP_LIST)
 
 KD = config_general.get("general", "pem_keystore_path")
+
+# import pdb; pdb.set_trace()
+basePort = config_yaml["general"]["base_port"]
+N = config_yaml['nodes']['total']
+client_id = config_yaml["nodes"]["client_id"]
+RL = [(l, basePort+i) for i, l in enumerate(IP_LIST[:client_id])]
+# We reserve the last IP as the client
+client_address = ((IP_LIST[client_id], basePort+client_id))

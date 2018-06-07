@@ -4,7 +4,8 @@ import ecdsa
 # import pickle
 
 # from trueconsensus.fastchain.config import KD
-import config
+from config import KD, \
+    _logger
 
 C = ecdsa.NIST256p
 SIG_SIZE = 256
@@ -37,23 +38,23 @@ def verify(key, sig, message):
         rc = key.verify(sig, message)
         return rc
     except Exception as E:
-        print(E)
+        _logger.debug(E)
         return False
 
 
 def get_key_path(i, ktype):
     try:
         KEY_NAME = ktype + str(i) + ASYMM_FILE_FORMATS[ktype]
-        print("KPATH - GET PATH - %s -- %s" % (ktype, KEY_NAME))
-        return os.path.join(config.KD, KEY_NAME)
+        print("KPATH - FETCH PATH - %s -- %s" % (ktype, KEY_NAME))
+        return os.path.join(KD, KEY_NAME)
     except Exception as E:
         quit(E)
         # raise
 
 
 def write_new_keys(n):
-    if not os.path.isdir(config.KD):
-        os.mkdir(config.KD)
+    if not os.path.isdir(KD):
+        os.mkdir(KD)
     for i in range(0, n):
         s_file = open(get_key_path(i, "sign"), 'wb')
         v_file = open(get_key_path(i, "verify"), 'wb')
@@ -83,7 +84,7 @@ def get_asymm_key(i, ktype=None):
 
 
 def read_keys_test(n, validate=False):
-    if not os.path.isdir(config.KD):
+    if not os.path.isdir(KD):
         print("Can't find key directory")
         sys.exit(0)
     s = []
