@@ -15,6 +15,8 @@ def generate_key():
 
 
 def sign(key, message):
+    # import pdb; pdb.set_trace()
+    key = bytes(key.to_string())
     h = hmac.new(key, message, hashlib.sha256)
     return h.digest()
 

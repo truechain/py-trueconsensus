@@ -7,7 +7,7 @@ from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from google.protobuf import reflection as _reflection
 from google.protobuf import symbol_database as _symbol_database
-# from google.protobuf import descriptor_pb2
+from google.protobuf import descriptor_pb2
 # @@protoc_insertion_point(imports)
 
 _sym_db = _symbol_database.Default()
@@ -18,9 +18,9 @@ _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='request.proto',
   package='request',
+  syntax='proto2',
   serialized_pb=_b('\n\rrequest.proto\x12\x07request\"\xb7\x01\n\x07Request\x12%\n\x05inner\x18\x01 \x02(\x0b\x32\x16.request.Request.Inner\x12\x0b\n\x03\x64ig\x18\x02 \x02(\x0c\x12\x0b\n\x03sig\x18\x03 \x02(\x0c\x12\r\n\x05outer\x18\x04 \x01(\x0c\x1a\\\n\x05Inner\x12\n\n\x02id\x18\x01 \x02(\x05\x12\x0b\n\x03seq\x18\x02 \x02(\x05\x12\x0c\n\x04view\x18\x03 \x02(\x05\x12\x0c\n\x04type\x18\x04 \x02(\t\x12\x0b\n\x03msg\x18\x05 \x02(\x0c\x12\x11\n\ttimestamp\x18\x06 \x01(\x05\"(\n\x07History\x12\x1d\n\x03req\x18\x01 \x03(\x0b\x32\x10.request.Request')
 )
-_sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 
 
@@ -82,6 +82,7 @@ _REQUEST_INNER = _descriptor.Descriptor(
   ],
   options=None,
   is_extendable=False,
+  syntax='proto2',
   extension_ranges=[],
   oneofs=[
   ],
@@ -132,6 +133,7 @@ _REQUEST = _descriptor.Descriptor(
   ],
   options=None,
   is_extendable=False,
+  syntax='proto2',
   extension_ranges=[],
   oneofs=[
   ],
@@ -162,6 +164,7 @@ _HISTORY = _descriptor.Descriptor(
   ],
   options=None,
   is_extendable=False,
+  syntax='proto2',
   extension_ranges=[],
   oneofs=[
   ],
@@ -174,6 +177,7 @@ _REQUEST.fields_by_name['inner'].message_type = _REQUEST_INNER
 _HISTORY.fields_by_name['req'].message_type = _REQUEST
 DESCRIPTOR.message_types_by_name['Request'] = _REQUEST
 DESCRIPTOR.message_types_by_name['History'] = _HISTORY
+_sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 Request = _reflection.GeneratedProtocolMessageType('Request', (_message.Message,), dict(
 

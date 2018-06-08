@@ -109,4 +109,5 @@ RL = [(l, basePort+i) for i, l in enumerate(IP_LIST[:client_id])]
 # We reserve the last IP as the client
 client_address = ((IP_LIST[client_id], basePort+client_id))
 
+# threading_enabled = True
 threading_enabled = False

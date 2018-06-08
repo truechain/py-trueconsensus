@@ -2,7 +2,8 @@
 # name: pbft base configuration
 nodes:
   total: 5 # excluding base client
-  client_id: 4 # total-1
+  client_id: 4 # total-1 => 0-indexed
+  server_id_init: 3 # => 0 indexed
 general:
   max_fail: 1
   base_port: 49500

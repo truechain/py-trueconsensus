@@ -45,7 +45,7 @@ def verify(key, sig, message):
 def get_key_path(i, ktype):
     try:
         KEY_NAME = ktype + str(i) + ASYMM_FILE_FORMATS[ktype]
-        print("KPATH - FETCH PATH - %s -- %s" % (ktype, KEY_NAME))
+        print("KPATH - FETCH - %s -- %s" % (ktype, KEY_NAME))
         return os.path.join(KD, KEY_NAME)
     except Exception as E:
         quit(E)

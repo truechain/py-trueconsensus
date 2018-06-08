@@ -179,6 +179,7 @@ class node:
     # TODO: include a failed send buffer per socket, retry later
     def safe_send(self, s, req):
         try:
+            import pdb; pdb.set_trace()
             self.outbuffmap[s.fileno()] += serialize(req)
             self.p.modify(s.fileno(), send_mask)
         except socket.error as serr:
@@ -205,21 +206,38 @@ class node:
         record(self.debuglog, msg)
 
 
-    def init_replica_map(self):
-        host = socket.gethostname()
-        # import pdb; pdb.set_trace()
-        ip, port = RL[self.id-1]
-        s = socket.socket()
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(('0.0.0.0', port))  # on EC2 we cannot directly bind on public addr
-        s.listen(50)
-        s.setblocking(0)
-        print("Server " + str(self.id) + " listening on port " + str(port))
-        print("IP: " + ip)
+    # def init_server(self, c):
+    #     try:
+    #         ip, port = RL[self.id-c-1]
+    #     except:
+    #         quit("Ran out of replica list address range. No more server config to try")
+    #     s = socket.socket()
+    #     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    #     # host = socket.gethostname()
+    #     s.bind(('0.0.0.0', port))  # on EC2 we cannot directly bind on public addr
+    #     s.listen(50)
+    #     s.setblocking(0)
+    #     print("Server " + str(self.id) + " listening on port " + str(port))
+    #     print("IP: " + ip)
+    #     return s
 
-        self.fdmap[s.fileno()] = s
-        self.p.register(s, recv_mask)
-        self.replica_map[self.id] = s
+    def init_replica_map(self, socket_obj):
+        # # import pdb; pdb.set_trace()
+        # c = 0
+        # while c < self.N:
+        #     s = None
+        #     try:
+        #         s = self.init_server(c)
+        #     except OSError as E:
+        #         # quit(E)
+        #         print(E)
+        #         c += 1
+        #     if s:
+        #         break
+
+        self.fdmap[socket_obj.fileno()] = socket_obj
+        self.p.register(socket_obj, recv_mask)
+        self.replica_map[self.id] = socket_obj
         #self.replica_map = {}
         #for i in range(self.id+1, self.N)[::-1]:
         for i in range(0, self.N):
@@ -227,8 +245,9 @@ class node:
                 continue
             # r = socket.socket()
             remote_ip, remote_port = RL[i]
-            print("trying to connect", RL)
+            print("trying to connect to replica list -- ", RL)
             retry = True
+            # retry = False
             count = 0
             while retry:  # re-trying will not cause a deadlock.
                 count += 1
@@ -241,7 +260,8 @@ class node:
                 except Exception as e:
                     time.sleep(0.5)
                     r.close()
-                    print("trying to connect to %s : %d, caused by %s" % (remote_ip, remote_port, str(e)))
+                    print("trying to connect [%s] to %s : %d, caused by %s" %
+                          (count, remote_ip, remote_port, str(e)))
                     #if count == 10000:
                      #   raise
                     continue
@@ -266,8 +286,9 @@ class node:
 
     # type, seq, message, (optional) tag request
     def create_request(self, req_type, seq, msg, outer_req=None):
-        import pdb; pdb.set_trace()
         key = get_asymm_key(self.id, ktype="sign")
+        # import pdb; pdb.set_trace()
+        msg = bytes(msg, encoding='utf-8')
         m = message.add_sig(key, self.id, seq, self.view, req_type, msg)
         if outer_req:
             m.outer = outer_req.SerializeToString()

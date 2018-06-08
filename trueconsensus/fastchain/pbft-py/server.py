@@ -6,6 +6,7 @@ import yaml
 import signal
 import time
 import signal
+import socket
 import logging
 from random import random
 from argparse import RawTextHelpFormatter, \
@@ -14,7 +15,8 @@ from argparse import RawTextHelpFormatter, \
 import node
 from config import config_yaml, \
     threading_enabled, \
-    N
+    N, \
+    RL
 
 
 parser = ArgumentParser(formatter_class=RawTextHelpFormatter,
@@ -72,7 +74,7 @@ if __name__ == "__main__":
     # import pdb; pdb.set_trace()
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
+
     if threading_enabled:
         from threading import Thread
 
@@ -106,7 +108,43 @@ if __name__ == "__main__":
         sys.stdout.flush()
 
     else:
-        n = node.node(0, 0, N)
+        def init_server(id):
+            global RL
+            try:
+                ip, port = RL[id]
+            except:
+                quit("Ran out of replica list address range. No more server config to try")
+            s = socket.socket()
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # host = socket.gethostname()
+            s.bind(('0.0.0.0', port))  # on EC2 we cannot directly bind on public addr
+            s.listen(50)
+            s.setblocking(0)
+            print("Server " + str(id) + " listening on port " + str(port))
+            print("IP: " + ip)
+            return s
+
+        # import pdb; pdb.set_trace()
+        def init_server_socket(_id=None):
+            """
+            attempts to loop over given ids to see if that (ip,socket)
+            from replica list RL is already in use.
+            """
+            global N
+            c = _id
+            while c < N:
+                s = None
+                try:
+                    s = init_server(c)
+                except OSError as E:
+                    # quit(E)
+                    print(E, " -- Server ID: ", c)
+                    c -= 1
+                if s:
+                    return s, c
+
+        socket_obj, _id = init_server_socket(_id=config_yaml["nodes"]["server_id_init"])
+        n = node.node(_id, 0, N)
         # n.init_keys(N)
-        n.init_replica_map()
+        n.init_replica_map(socket_obj)
         n.server_loop()
