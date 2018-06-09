@@ -1,19 +1,19 @@
 import os
 import sys
 import time
-import errno
+# import errno
 import socks
 import struct
 import socket
 import select
-import signal
+# import signal
 import logging
-import traceback
-import threading
-from Crypto.Hash import SHA256
+# import traceback
+# import threading
+# from Crypto.Hash import SHA256
 from threading import Timer, Thread, Lock, Condition
 
-import sig
+# import sig
 import bank
 from ecdsa_sig import get_asymm_key
 import request_pb2
@@ -155,8 +155,10 @@ class node:
             "CHKP": self.process_checkpoint,
         }
         # log for executed commands
-        COMMIT_LOG_FILE = os.path.join(config_general.get("log", "root_folder"),
-                                       "replica%s_commits.txt" % self.id)
+        COMMIT_LOG_FILE = os.path.join(
+            config_general.get("log", "root_folder"),
+            "replica%s_commits.txt" % self.id
+        )
         self.commitlog = open(COMMIT_LOG_FILE, 'wb', 1)
         # log for debug messages
         self.debuglog = open("replica" + str(self.id) + "_log.txt", 'wb', 1)
@@ -176,11 +178,12 @@ class node:
         }
         self.prep_dict = {}
         self.comm_dict = {}
+
     # TODO: include a failed send buffer per socket, retry later
     def safe_send(self, s, req):
         try:
-            import pdb; pdb.set_trace()
-            self.outbuffmap[s.fileno()] += serialize(req)
+            # import pdb; pdb.set_trace()
+            self.outbuffmap[s.fileno()] += serialize(req).decode('latin-1')
             self.p.modify(s.fileno(), send_mask)
         except socket.error as serr:
             print(serr)
@@ -205,47 +208,19 @@ class node:
                                                    str(counter))
         record(self.debuglog, msg)
 
-
-    # def init_server(self, c):
-    #     try:
-    #         ip, port = RL[self.id-c-1]
-    #     except:
-    #         quit("Ran out of replica list address range. No more server config to try")
-    #     s = socket.socket()
-    #     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    #     # host = socket.gethostname()
-    #     s.bind(('0.0.0.0', port))  # on EC2 we cannot directly bind on public addr
-    #     s.listen(50)
-    #     s.setblocking(0)
-    #     print("Server " + str(self.id) + " listening on port " + str(port))
-    #     print("IP: " + ip)
-    #     return s
-
     def init_replica_map(self, socket_obj):
-        # # import pdb; pdb.set_trace()
-        # c = 0
-        # while c < self.N:
-        #     s = None
-        #     try:
-        #         s = self.init_server(c)
-        #     except OSError as E:
-        #         # quit(E)
-        #         print(E)
-        #         c += 1
-        #     if s:
-        #         break
-
         self.fdmap[socket_obj.fileno()] = socket_obj
         self.p.register(socket_obj, recv_mask)
         self.replica_map[self.id] = socket_obj
         #self.replica_map = {}
         #for i in range(self.id+1, self.N)[::-1]:
-        for i in range(0, self.N):
+        for i in range(self.N):
             if i == self.id:
                 continue
             # r = socket.socket()
+            # import pdb; pdb.set_trace()
             remote_ip, remote_port = RL[i]
-            print("trying to connect to replica list -- ", RL)
+            logging.debug("trying to connect to replica list -- %s" % RL)
             retry = True
             # retry = False
             count = 0
@@ -257,10 +232,11 @@ class node:
                     # r.setproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", config.TOR_SOCKSPORT[self.id], True)
                     # r.setblocking(0)
                     r.connect((remote_ip, remote_port))
+                    logging.info("CONNECTED from %s to remote %s:%s" % (self.id, remote_ip, remote_port))
                 except Exception as e:
                     time.sleep(0.5)
                     r.close()
-                    print("trying to connect [%s] to %s : %d, caused by %s" %
+                    logging.debug("trying to connect [%s] to %s : %d, caused by %s" %
                           (count, remote_ip, remote_port, str(e)))
                     #if count == 10000:
                      #   raise
@@ -317,15 +293,12 @@ class node:
         if waiting:
             self.waiting[req.inner.seq] = r
 
-    def suicide(self):
-        #time.sleep(5)
-        #self.kill_flag = True
-        os.kill(os.getpid(), signal.SIGINT)
-
-    def try_client(self):
+    def try_client(self, from_server_id):
         ip, port = client_address
+        logging.debug("--> Trying client %s from server ID: %s " % \
+                      (client_address, from_server_id))
         while True:
-            time.sleep(5);
+            # time.sleep(5)
             self.clientlock.acquire()
             if len(self.clientbuff) > 0:
                 try:
@@ -340,10 +313,13 @@ class node:
 
 
     def execute(self, req):
+        """
+        clientbuff is used to maintain buffer for failed requests for retries
+        """
         seq = req.inner.seq
         dig = req.inner.msg
 
-        client_req,t,fd = self.active[dig]
+        client_req, t, fd = self.active[dig]
         t.cancel()
 
         key = get_asymm_key(self.id, ktype="sign")
@@ -916,25 +892,29 @@ class node:
 
 
     def server_loop(self):
+        """
+        call flow graph:
+
+        -> server_loop() -> parse_request() ->
+        self.request_types[req.inner.type]() -> [] process_client_request() ->
+        execute_in_order() -> execute() ->
+            - self.bank.process_request()
+            - client_sock.send()
+            - record()
+        -> suicide() when Max Requests reached..
+        """
         counter = 0
-        #host = socket.gethostname()
-        #ip,port = RL[self.id]
-        #s = socket.socket()
-        #s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        #s.bind(('0.0.0.0', port))  # on EC2 we cannot directly bind on public addr
-        #s.listen(50)
-        #s.setblocking(0)
-        #print("Server " + str(self.id) + " listening on port " + str(port))
-        #print("IP: " + ip)
 
         #self.fdmap[s.fileno] = s
         #self.p.register(s, recv_mask)
         s = self.replica_map[self.id]
-        t = Timer(5, self.try_client)
+        logging.debug("------------ INIT SERVER LOOP [ID: %s]-------------" % self.id)
+        t = Timer(5, self.try_client, args=[self.id])
         t.start()
         while True:
             #print(counter)
             events = self.p.poll()
+            logging.debug("Polling events queue -> %s" % events)
             #print("--------")
             #cstart = time.time()
             for fd, event in events:

@@ -2,7 +2,7 @@ import os
 import sys
 import ecdsa
 # import pickle
-
+import logging
 # from trueconsensus.fastchain.config import KD
 from config import KD, \
     _logger
@@ -45,7 +45,7 @@ def verify(key, sig, message):
 def get_key_path(i, ktype):
     try:
         KEY_NAME = ktype + str(i) + ASYMM_FILE_FORMATS[ktype]
-        print("KPATH - FETCH - %s -- %s" % (ktype, KEY_NAME))
+        logging.info("KPATH - FETCH - %s -- %s" % (ktype, KEY_NAME))
         return os.path.join(KD, KEY_NAME)
     except Exception as E:
         quit(E)
@@ -68,7 +68,7 @@ def write_new_keys(n):
 def get_asymm_key(i, ktype=None):
     kpath = get_key_path(i, ktype)
     if not os.path.isfile(kpath):
-        print("can't find key file: ", kpath)
+        logging.error("can't find key file: ", kpath)
         sys.exit(0)
     key_pem = open(kpath, 'rb').read()
     return ASYMM_FUNC_MAP[ktype](key_pem)
@@ -77,7 +77,7 @@ def get_asymm_key(i, ktype=None):
 # def get_verifying_key(i):
 #     kpath = get_key_path(i, "verify")
 #     if not os.path.isfile(kpath):
-#         print("can't find key file: ", kpath)
+#         logging.error("can't find key file: ", kpath)
 #         sys.exit(0)
 #     key_pub = open(kpath, 'rb').read()
 #     return ecdsa.VerifyingKey.from_pem(key_pem)
@@ -85,7 +85,7 @@ def get_asymm_key(i, ktype=None):
 
 def read_keys_test(n, validate=False):
     if not os.path.isdir(KD):
-        print("Can't find key directory")
+        logging.error("Can't find key directory")
         sys.exit(0)
     s = []
     v = []
@@ -104,9 +104,9 @@ def validate_keypair(i, s, v):
     sig = s.sign(msg)
     ver = v.verify(sig, msg)
     if not ver:
-        print("Error while reading keypair: " % i)
+        logging.error("Error while reading keypair: " % i)
         return False
-    print("Round succeeded for keypair: " % i)
+    logging.info("Round succeeded for keypair: " % i)
     return True
 
 

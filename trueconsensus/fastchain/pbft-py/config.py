@@ -59,9 +59,6 @@ def load_yaml_config(path, no_val=False):
 config_general = load_config(CFG_GENERAL_PATH)
 
 LOG_ROOT = config_general.get("log", "root_folder")
-# import pdb; pdb.set_trace()
-FNAME = config_general.get("log", "server_logfile")
-FSIZE = int(config_general.get("log", "max_log_size"))
 
 try:
     if not os.path.exists(LOG_ROOT):
@@ -73,41 +70,53 @@ except Exception as E:
 
 FMT = "[%(asctime)s] [%(levelname)s ] " + \
       "[%(filename)s:%(lineno)d:%(funcName)s()] - %(message)s"
-
-_logger = logging.getLogger(__name__)
-
-formatter = logging.Formatter(FMT)
-handler = RotatingFileHandler(
-    os.path.join(LOG_ROOT, FNAME),
-    maxBytes=FSIZE,
-    backupCount=1
-)
-handler.setFormatter(formatter)
-_logger.root.level = logging.DEBUG
-_logger.addHandler(handler)
+FSIZE = int(config_general.get("log", "max_log_size"))
 
 
-# _logger = logging.getLogger("pbftx.config")
+def setup_logger(fname):
+    _logger = logging.getLogger(fname)
+    formatter = logging.Formatter(FMT)
+    handler = RotatingFileHandler(
+        os.path.join(LOG_ROOT, fname),
+        maxBytes=FSIZE,
+        backupCount=1
+    )
+    handler.setFormatter(formatter)
+    _logger.root.level = logging.DEBUG
+    _logger.addHandler(handler)
 
-print("Storing logs to file: %s" % FNAME)
+    # _logger = logging.getLogger("pbftx.config")
+    print("Storing logs to file: %s" % fname)
+    return _logger
+
+
+# main pbft logger
+_logger = setup_logger(config_general.get("log", "server_logfile"))
+
+# client logger
+client_logger = setup_logger(config_general.get("log", "client_logfile"))
 
 config_yaml = load_yaml_config(CFG_YAML_PATH)
 
-IP_LIST = [l.strip() for l in open(PEER_NETWORK_FILE, 'r').read().split('\n') if l]
+# import pdb; pdb.set_trace()
+
+network_file_content = open(PEER_NETWORK_FILE, 'r').read().split('\n')
+IP_LIST = [l.strip() for l in network_file_content if l]
 # total = len(IP_LIST)
 
 KD = config_general.get("general", "pem_keystore_path")
 
-# import pdb; pdb.set_trace()
 basePort = config_yaml["general"]["base_port"]
-N = config_yaml['nodes']['total']
+N = config_yaml['nodes']['total'] - 1
 
 client_id = config_yaml["nodes"]["client_id"]
 
+# import pdb; pdb.set_trace()
+
 # replica list
-RL = [(l, basePort+i) for i, l in enumerate(IP_LIST[:client_id])]
+RL = [(l, basePort+i) for i, l in enumerate(IP_LIST[:N])]
 # We reserve the last IP as the client
-client_address = ((IP_LIST[client_id], basePort+client_id))
+client_address = ((IP_LIST[client_id-1], basePort+client_id-1))
 
 # threading_enabled = True
 threading_enabled = False
