@@ -7,7 +7,7 @@ import struct
 import socket
 import select
 # import signal
-import logging
+# import logging
 # import traceback
 # import threading
 # from Crypto.Hash import SHA256
@@ -20,7 +20,8 @@ import request_pb2
 import proto_message as message
 from config import config_general, \
     RL, \
-    client_address
+    client_address, \
+    _logger
 
 BUF_SIZE = 4096 * 8 * 8
 recv_mask = select.EPOLLIN | select.EPOLLPRI | select.EPOLLRDNORM
@@ -66,8 +67,8 @@ def record_pbft(file, request):
 
 class node:
     def debug_print_bank(self, signum, flag):
-        print(len(self.waiting))
-        print("last executed: ", self.last_executed)
+        _logger.info("wait queue length: %s" % len(self.waiting))
+        _logger.info("last executed: %s" % self.last_executed)
         self.bank.print_balances()
         # m = self.create_request("REQU", 0, "replica " + str(self.id) + " going down", 0)
         # self.broadcast_to_nodes(m)
@@ -110,7 +111,7 @@ class node:
         self.timeout = 10*60     # time interval (seconds), before view change
         self.lock = Lock()
         # hack
-        self.clientbuff = ""
+        self.clientbuff = bytes()
         self.clientlock = Lock()
 
         self.fdmap = {}    # file descriptor to socket mapping
@@ -182,8 +183,7 @@ class node:
     # TODO: include a failed send buffer per socket, retry later
     def safe_send(self, s, req):
         try:
-            # import pdb; pdb.set_trace()
-            self.outbuffmap[s.fileno()] += serialize(req).decode('latin-1')
+            self.outbuffmap[s.fileno()] += serialize(req)#.decode('latin-1')
             self.p.modify(s.fileno(), send_mask)
         except socket.error as serr:
             print(serr)
@@ -220,7 +220,7 @@ class node:
             # r = socket.socket()
             # import pdb; pdb.set_trace()
             remote_ip, remote_port = RL[i]
-            logging.debug("trying to connect to replica list -- %s" % RL)
+            _logger.debug("trying to connect to replica list -- %s" % RL)
             retry = True
             # retry = False
             count = 0
@@ -232,11 +232,11 @@ class node:
                     # r.setproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", config.TOR_SOCKSPORT[self.id], True)
                     # r.setblocking(0)
                     r.connect((remote_ip, remote_port))
-                    logging.info("CONNECTED from %s to remote %s:%s" % (self.id, remote_ip, remote_port))
+                    _logger.info("CONNECTED from %s to remote %s:%s" % (self.id, remote_ip, remote_port))
                 except Exception as e:
                     time.sleep(0.5)
                     r.close()
-                    logging.debug("trying to connect [%s] to %s : %d, caused by %s" %
+                    _logger.debug("trying to connect [%s] to %s : %d, caused by %s" %
                           (count, remote_ip, remote_port, str(e)))
                     #if count == 10000:
                      #   raise
@@ -245,8 +245,8 @@ class node:
            #r.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
             self.replica_map[i] = r
             self.fdmap[r.fileno()] = r
-            self.buffmap[r.fileno()] = ""
-            self.outbuffmap[r.fileno()] = ""
+            self.buffmap[r.fileno()] = bytes()
+            self.outbuffmap[r.fileno()] = bytes()
             self.p.register(r, recv_mask)
             #m = message.add_sig(K, "INIT " + str(ID), ID)
             #m = add_sig(0,"INIT",str(ID))
@@ -295,7 +295,7 @@ class node:
 
     def try_client(self, from_server_id):
         ip, port = client_address
-        logging.debug("--> Trying client %s from server ID: %s " % \
+        _logger.debug("--> Trying client %s from server ID: %s " % \
                       (client_address, from_server_id))
         while True:
             # time.sleep(5)
@@ -306,7 +306,7 @@ class node:
                     client_sock.connect((ip, port))
                     client_sock.send(self.clientbuff)
                     client_sock.close()
-                    self.clientbuff = ""
+                    self.clientbuff = bytes()
                 except:
                     pass
             self.clientlock.release()
@@ -352,7 +352,7 @@ class node:
             client_sock.connect((ip, port))
             client_sock.send(self.clientbuff+serialize(m))
             client_sock.close()
-            self.clientbuff = ""
+            self.clientbuff = bytes()
         except:
             print("failed to send, adding to client outbuff")
             self.clientbuff += serialize(m)
@@ -456,7 +456,7 @@ class node:
         #TODO set flag to stop processing requests
 
     def process_client_request(self, req, fd):
-        #print("PROCESSING CLIENT REQUEST")
+        _logger.info("Phase - PROCESS CLIENT REQ - fd [%s]" % fd)
         if req.inner.timestamp == 0:
             pass
             #print(req.inner.msg)
@@ -535,6 +535,7 @@ class node:
             return False
 
     def process_preprepare(self, req, fd):
+        _logger.info("Phase - PRE-PREPARE - fd [%s]" % fd)
         if req.inner.seq in self.node_message_log["PRPR"]:
             return None
 
@@ -582,6 +583,7 @@ class node:
                 self.execute_in_order(m)
 
     def process_prepare(self, req, fd):
+        _logger.info("Phase - PREPARE - fd [%s]" % fd)
         self.add_node_history(req)
         self.inc_prep_dict(req.inner.msg)
         if self.check_prepared_margin(req.inner.msg, req.inner.seq):
@@ -598,6 +600,8 @@ class node:
                 self.execute_in_order(m)
 
     def process_commit(self, req, fd):
+        _logger.info("Phase - COMMIT - fd [%s]" % fd)
+
         self.add_node_history(req)
         self.inc_comm_dict(req.inner.msg)
         if self.check_committed_margin(req.inner.msg, req):
@@ -670,6 +674,7 @@ class node:
 
     #m = self.create_request("VCHA", self.last_stable_checkpoint, msg)
     def process_view_change(self, req, fd):
+        _logger.info("Phase - PROCESS VIEW CHANGE - fd [%s]" % fd)
         print("Received a view change req from " + str(req.inner.id))
         print(req.inner.view)
         self.add_node_history(req)
@@ -789,7 +794,8 @@ class node:
         return True
 
     def process_new_view(self, req, fd):
-        print("Received a new_view from " + str(req.inner.id))
+        _logger.info("Phase - PROCESS NEW VIEW - fd [%s] - new_view from ID [%s]" % \
+                     (fd, req.inner.id))
         # parse requests by type
         m = req.inner.msg
         vchange_list = []
@@ -797,7 +803,7 @@ class node:
         counter = 0
         while len(m) > 0:
             counter += 1
-            print("COUNTER", counter)
+            _logger.info("COUNTER [%s]" % counter)
             b = m[:4]
             size = struct.unpack("!I",b)[0]
             try:
@@ -807,11 +813,11 @@ class node:
                 key = get_asymm_key(r2.inner.id, ktype="sign")
                 r2 = message.check(key,r2)
                 if r2 == None:
-                    print("FAILED SIG CHECK IN NEW VIEW")
+                    _logger.warn("FAILED SIG CHECK IN NEW VIEW")
                     return
             except:
                 r2 = None
-                print("FAILED PROTOBUF EXTRACT IN NEW VIEW")
+                _logger.warn("FAILED PROTOBUF EXTRACT IN NEW VIEW")
                 return
 
             if r2.inner.type == "VCHA":
@@ -821,7 +827,7 @@ class node:
             m = m[size+4:]
 
         if not self.nvprocess_view(vchange_list):
-            print("FAILED VCHANGE VALIDATION IN NEW VIEW")
+            _logger.warn("FAILED VCHANGE VALIDATION IN NEW VIEW")
             return
 
         if req.inner.view >= self.view:
@@ -834,7 +840,7 @@ class node:
             self.client_message_log = {}
             self.prepared = {}
             rc2 = self.nvprocess_prpr(prpr_list)
-            print("New view ", self.view, "accepted")
+            _logger.info("New view - %s - accepted" % self.view)
         return
 
 
@@ -859,6 +865,7 @@ class node:
     def parse_request(self, request_bytes, fd):
         # attempt to reconstruct the request object
         # close connection and return on failure
+        _logger.info("Phase - PARSE REQUEST - fd [%s]" % fd)
         try:
             req = request_pb2.Request()
             req.ParseFromString(request_bytes)
@@ -866,30 +873,38 @@ class node:
             key = get_asymm_key(req.inner.id, ktype="sign")
             req = message.check(key,req)
             if req == None:
-                print("FAILED SIG CHECK SOMEWHERE")
+                _logger.error("FAILED SIG CHECK SOMEWHERE")
                 return
         except:
             req = None
-            print("ERROR IN PROTOBUF TYPES")
+            _logger.error("ERROR IN PROTOBUF TYPES")
             raise  # for debug
             self.clean(fd)
             return
         #print(req.inner.type, len(request_bytes))
         # TODO: Check for view number and view change, h/H
         if req.inner.view != self.view or not self.view_active:
-            if req.inner.type != "VCHA" and req.inner.type != "NEVW" and req.inner.type != "CHKP" and req.inner.type != "REQU":
-                print("Bad view number", "TYPE:",req.inner.type,"ID", req.inner.id,"SEQ",req.inner.seq, "VIEW", req.inner.view)
+            if req.inner.type != "VCHA" and req.inner.type != "NEVW" and \
+                    req.inner.type != "CHKP" and req.inner.type != "REQU":
+                debug_msg = "TYPE: %s - ID %s - SEQ %s - VIEW - %s" % (
+                    req.inner.type,
+                    req.inner.id,
+                    req.inner.seq,
+                    req.inner.view
+                )
+                _logger.warn("Bad view number - %s" % debug_msg)
                 return
         if self.in_node_history(req):
-            #print("Duplicate node message")
+            _logger.warn("Duplicate node message")
             #return
             pass
         if req.inner.type in self.request_types and not self.in_client_history(req):
             self.request_types[req.inner.type](req, fd)
         else:
             self.clean(fd)
-            print("BAD MESSAGE TYPE ..." + req.inner.type + "..." + str(req.inner.id))
-
+            _logger.warn("BAD MESSAGE TYPE - %s - %s" % (
+                req.inner.type,
+                req.inner.id))
 
     def server_loop(self):
         """
@@ -908,14 +923,13 @@ class node:
         #self.fdmap[s.fileno] = s
         #self.p.register(s, recv_mask)
         s = self.replica_map[self.id]
-        logging.debug("------------ INIT SERVER LOOP [ID: %s]-------------" % self.id)
+        _logger.debug("------------ INIT SERVER LOOP [ID: %s]-------------" % self.id)
         t = Timer(5, self.try_client, args=[self.id])
         t.start()
         while True:
             #print(counter)
             events = self.p.poll()
-            logging.debug("Polling events queue -> %s" % events)
-            #print("--------")
+            _logger.debug("Polling events queue -> %s" % events)
             #cstart = time.time()
             for fd, event in events:
                 counter += 1
@@ -923,15 +937,15 @@ class node:
                 data = None
                 recv_flag = False
                 if fd is s.fileno():
-                    c,addr = s.accept()
-                    #logging.debug("Got connection from "+ str(addr))
+                    c, addr = s.accept()
+                    _logger.debug("Got connection from [%s:%s]" % addr)
                     #print("Got connection from " + str(addr))
                     c.setblocking(0)
                     #c.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
                     self.p.register(c, recv_mask)
                     self.fdmap[c.fileno()] = c
-                    self.buffmap[c.fileno()] = ""
-                    self.outbuffmap[c.fileno()] = ""
+                    self.buffmap[c.fileno()] = bytes()
+                    self.outbuffmap[c.fileno()] = bytes()
                     self.connections += 1
                 else:
                     # if we have a write event
@@ -960,15 +974,19 @@ class node:
                         #self.clean(fd)
                     if not data and recv_flag:
                         try:
-                            logging.debug("Closing connection from "+str(self.fdmap[fd].getpeername()))
+                            _logger.debug("Closing connection from %s " % self.fdmap[fd].getpeername())
                         except:
-                            logging.debug("Closing connection " + str(fd))
+                            _logger.debug("Closing connection %s " % fd)
                         self.clean(fd)
                     elif recv_flag:
-                        logging.debug("LENGTH: " + str(len(data)))
-                        self.buffmap[fd] += data
+                        _logger.debug("Chunk Length: %s" % len(data))# .decode('latin-1')))
+                        self.buffmap[fd] += data#.decode('latin-1')
                         while(len(self.buffmap[fd]) > 3):
-                            size = struct.unpack("!I", self.buffmap[fd][:4])[0]
+                            try:
+                                size = struct.unpack("!I", self.buffmap[fd][:4])[0]
+                            except:
+                                import pdb; pdb.set_trace()
+
                             if len(self.buffmap[fd]) >= size+4:
                                 self.parse_request(self.buffmap[fd][4:size+4], fd)
                                 if not fd in self.buffmap:

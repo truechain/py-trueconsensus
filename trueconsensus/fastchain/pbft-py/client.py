@@ -39,6 +39,7 @@ def recv_response(n):
     client_logger.debug(client_msg)
     while(True):
         events = p.poll()
+        print("HI SDSD S ISDJ", events)
         for fd, event in events:
             c, addr = s.accept()
             r = c.recv(4096)
@@ -53,17 +54,17 @@ def recv_response(n):
             count += 1
             if req.inner.seq % 100 == 0:
             #if True:
-                print("SEQUENCE:", req.inner.seq)
+                client_logger.debug("CLIENT [%s] SEQUENCE:" % (client_id, req.inner.seq))
         #if req.inner.seq == n:
         if count == n * len(RL):
             kill_flag = True
-            print('time', end_time - start_time)
-            f.close()
+            client_logger.debug('CLIENT [%s] total time spent with chain: %s' % (end_time - start_time))
+            # f.close()
 
 if len(sys.argv) == 2:
     n = int(sys.argv[1])
 else:
-    n = 1000
+    n = 50
 
 # id = 9
 # n = 0
@@ -75,21 +76,23 @@ m = open("reqs.dat", "rb").read()
 print("Loaded Messages")
 print("Starting send for bufflen %s" % len(m))
 sock_list = []
-# import pdb; pdb.set_trace()
-for i in range(len(m)//4):
-    b = m[:4]
-    try:
-        # size is > 4 after unpacking the bytes
-        size = struct.unpack("!I", b)[0]
-    except struct.error:
-        # import pdb; pdb.set_trace()
-        break
-    m = m[size+4:]
-    # n += 1
-    # print(i, size, len(m))
+
+# # import pdb; pdb.set_trace()
+# for i in range(len(m)//4):
+#     b = m[:4]
+#     try:
+#         # size is > 4 after unpacking the bytes
+#         size = struct.unpack("!I", b)[0]
+#     except struct.error:
+#         # import pdb; pdb.set_trace()
+#         break
+#     m = m[size+4:]
+#     # n += 1
+#     # print(i, size, len(m))
 
 start_time = time.time()
-for i in range(n):
+# for i in range(n):
+while len(m) > 0:
     b = m[:4]
     try:
         size = struct.unpack("!I", b)[0]
@@ -103,7 +106,10 @@ for i in range(n):
             ## r.setblocking(0)
             r.connect((ip, port))
             # s.connect((ip,port))
-            r.send(m[:size+4])
+            chunk = m[:size+4]
+            client_logger.info("sending chunk of length %s over to replica set" % len(chunk))
+            r.send(chunk)
+            del chunk
             # s.send(m[:size+4])
             # sock_list.append(s)
             sock_list.append(r)
