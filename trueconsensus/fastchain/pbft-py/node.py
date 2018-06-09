@@ -548,10 +548,10 @@ class node:
                 client_key = get_asymm_key(client_req.inner.id, ktype="sign")
                 client_req = message.check(client_key, client_req)
                 if client_req == None or req.inner.msg != client_req.dig:
-                    print("FAILED PRPR OUTER SIGCHECK")
+                    _logger.warn("FAILED PRPR OUTER SIGCHECK")
                     return
             except:
-                print("ERROR IN PRPR OUTER PROTOBUFF")
+                _logger.error("ERROR IN PRPR OUTER PROTOBUFF")
                 raise
         else:
             client_req = None

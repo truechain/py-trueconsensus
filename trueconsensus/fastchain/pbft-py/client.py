@@ -30,8 +30,8 @@ def recv_response(n):
     s.setblocking(0)
     s.bind(('0.0.0.0', port))
     s.listen(50)
-    print("Client [%s] listening on port %s" % (client_id, port))
-    print("Client IP: ", ip)
+    client_logger.info("Client [%s] listening on port %s" % (client_id, port))
+    client_logger.info("Client IP: %s" % ip)
     p.register(s)
     # f = open("client_log.txt", 'w')
     client_msg = "[%s] SEQUENCE: 0 REPLICA: 0 START\n" % (time.time())
@@ -39,7 +39,7 @@ def recv_response(n):
     client_logger.debug(client_msg)
     while(True):
         events = p.poll()
-        print("HI SDSD S ISDJ", events)
+        client_logger.info("Current events queue: %s" % events)
         for fd, event in events:
             c, addr = s.accept()
             r = c.recv(4096)
@@ -73,8 +73,8 @@ t.daemon = True
 t.start()
 m = open("reqs.dat", "rb").read()
 
-print("Loaded Messages")
-print("Starting send for bufflen %s" % len(m))
+client_logger.info("Loaded Messages")
+client_logger.info("Starting send for bufflen %s" % len(m))
 sock_list = []
 
 # # import pdb; pdb.set_trace()
@@ -116,7 +116,8 @@ while len(m) > 0:
             r.close()
             # s.close()
         except Exception as e:  # broad catch
-            print("failed to send to", ip, port, 'due to', e)
+            client_logger.error("failed to send to [%s:%s] due to %s" % \
+                                (ip, port, e))
             pass
     #s2 = socket.socket()
     #s2.connect(RL[0])
@@ -124,7 +125,7 @@ while len(m) > 0:
     #s2.close()
     m = m[size+4:]
 
-print("Done sending... wait for receives")
+client_logger.info("Done sending... wait for receives")
 while True:
     time.sleep(1)
     if kill_flag:

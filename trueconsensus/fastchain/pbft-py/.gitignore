@@ -12,3 +12,4 @@ keys/
 tx*.txt
 bank*.txt
 log/
+*.dat
