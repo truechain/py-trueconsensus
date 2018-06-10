@@ -1,9 +1,12 @@
 import os
 import sys
+import hmac
 import ecdsa
+import hashlib
 # import pickle
-import logging
+# import logging
 # from trueconsensus.fastchain.config import KD
+
 from config import KD, \
     _logger
 
@@ -33,19 +36,34 @@ def sign(key, message):
     return key.sign(message)
 
 
+def sign_proto_key(key, message):
+    # import pdb; pdb.set_trace()
+    key = bytes(key.to_string())
+    h = hmac.new(key, message, hashlib.sha256)
+    return h.digest()
+
+
 def verify(key, sig, message):
     try:
         rc = key.verify(sig, message)
         return rc
     except Exception as E:
-        _logger.debug(E)
+        _logger.error(E)
         return False
+
+
+def verify_proto_key(key, dig1, message):
+    # import pdb; pdb.set_trace()
+    key = bytes(key.to_string())
+    h = hmac.new(key, message, hashlib.sha256)
+    # return hmac.compare_digest(dig1, h.digest())
+    return dig1 == h.digest()
 
 
 def get_key_path(i, ktype):
     try:
         KEY_NAME = ktype + str(i) + ASYMM_FILE_FORMATS[ktype]
-        logging.info("KPATH - FETCH - %s -- %s" % (ktype, KEY_NAME))
+        _logger.info("KPATH - FETCH - %s -- %s" % (ktype, KEY_NAME))
         return os.path.join(KD, KEY_NAME)
     except Exception as E:
         quit(E)
@@ -68,8 +86,9 @@ def write_new_keys(n):
 def get_asymm_key(i, ktype=None):
     kpath = get_key_path(i, ktype)
     if not os.path.isfile(kpath):
-        logging.error("can't find key file: ", kpath)
-        sys.exit(0)
+        msg = "can't find key file: %s" % kpath
+        _logger.error(msg)
+        sys.exit(msg)
     key_pem = open(kpath, 'rb').read()
     return ASYMM_FUNC_MAP[ktype](key_pem)
 
@@ -77,7 +96,7 @@ def get_asymm_key(i, ktype=None):
 # def get_verifying_key(i):
 #     kpath = get_key_path(i, "verify")
 #     if not os.path.isfile(kpath):
-#         logging.error("can't find key file: ", kpath)
+#         _logger.error("can't find key file: ", kpath)
 #         sys.exit(0)
 #     key_pub = open(kpath, 'rb').read()
 #     return ecdsa.VerifyingKey.from_pem(key_pem)
@@ -85,7 +104,7 @@ def get_asymm_key(i, ktype=None):
 
 def read_keys_test(n, validate=False):
     if not os.path.isdir(KD):
-        logging.error("Can't find key directory")
+        _logger.error("Can't find key directory")
         sys.exit(0)
     s = []
     v = []
@@ -104,9 +123,9 @@ def validate_keypair(i, s, v):
     sig = s.sign(msg)
     ver = v.verify(sig, msg)
     if not ver:
-        logging.error("Error while reading keypair: " % i)
+        _logger.error("Error while reading keypair: " % i)
         return False
-    logging.info("Round succeeded for keypair: " % i)
+    _logger.info("Round succeeded for keypair: " % i)
     return True
 
 

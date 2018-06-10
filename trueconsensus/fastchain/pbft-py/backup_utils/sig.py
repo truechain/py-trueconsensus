@@ -1,3 +1,5 @@
+#!/bin/env python3
+
 import os
 import sys
 import ecdsa
@@ -21,8 +23,10 @@ def sign(key, message):
     return h.digest()
 
 
-def verify(key, dig1, bytes):
-    h = hmac.new(key, bytes, hashlib.sha256)
+def verify(key, dig1, message):
+    # import pdb; pdb.set_trace()
+    key = bytes(key.to_string())
+    h = hmac.new(key, message, hashlib.sha256)
     # return hmac.compare_digest(dig1, h.digest())
     return dig1 == h.digest()
 

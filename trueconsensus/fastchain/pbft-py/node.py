@@ -162,7 +162,11 @@ class node:
         )
         self.commitlog = open(COMMIT_LOG_FILE, 'wb', 1)
         # log for debug messages
-        self.debuglog = open("replica" + str(self.id) + "_log.txt", 'wb', 1)
+        replcia_log_loc = os.path.join(
+            config_general.get("log", "root_folder"),
+            "replica" + str(self.id) + "_log.txt"
+        )
+        self.debuglog = open(replcia_log_loc, 'w', 1)
 
     def reset_message_log(self):
         # message log for node communication related to the PBFT protocol:
@@ -811,7 +815,7 @@ class node:
                 r2.ParseFromString(m[4:size+4])
                 record_pbft(self.debuglog, r2)
                 key = get_asymm_key(r2.inner.id, ktype="sign")
-                r2 = message.check(key,r2)
+                r2 = message.check(key, r2)
                 if r2 == None:
                     _logger.warn("FAILED SIG CHECK IN NEW VIEW")
                     return
@@ -867,11 +871,12 @@ class node:
         # close connection and return on failure
         _logger.info("Phase - PARSE REQUEST - fd [%s]" % fd)
         try:
+            # import pdb; pdb.set_trace()
             req = request_pb2.Request()
             req.ParseFromString(request_bytes)
             record_pbft(self.debuglog, req)
             key = get_asymm_key(req.inner.id, ktype="sign")
-            req = message.check(key,req)
+            req = message.check(key, req)
             if req == None:
                 _logger.error("FAILED SIG CHECK SOMEWHERE")
                 return

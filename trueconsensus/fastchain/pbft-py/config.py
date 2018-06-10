@@ -1,5 +1,6 @@
-import os
+#!/bin/env python
 
+import os
 import yaml
 import logging
 import configparser
@@ -76,8 +77,9 @@ FSIZE = int(config_general.get("log", "max_log_size"))
 def setup_logger(fname):
     _logger = logging.getLogger(fname)
     formatter = logging.Formatter(FMT)
+    log_path = os.path.join(LOG_ROOT, fname)
     handler = RotatingFileHandler(
-        os.path.join(LOG_ROOT, fname),
+        log_path,
         maxBytes=FSIZE,
         backupCount=1
     )
@@ -86,7 +88,7 @@ def setup_logger(fname):
     _logger.addHandler(handler)
 
     # _logger = logging.getLogger("pbftx.config")
-    print("Storing logs to file: %s" % fname)
+    print("Storing logs to file: %s" % log_path)
     return _logger
 
 
@@ -107,9 +109,9 @@ IP_LIST = [l.strip() for l in network_file_content if l]
 KD = config_general.get("general", "pem_keystore_path")
 
 basePort = config_yaml["general"]["base_port"]
-N = config_yaml['nodes']['total'] - 1
+N = config_yaml['testbed_config']['total'] - 1
 
-client_id = config_yaml["nodes"]["client_id"]
+client_id = config_yaml["testbed_config"]["client_id"]
 
 # import pdb; pdb.set_trace()
 
@@ -118,5 +120,5 @@ RL = [(l, basePort+i) for i, l in enumerate(IP_LIST[:N])]
 # We reserve the last IP as the client
 client_address = ((IP_LIST[client_id-1], basePort+client_id-1))
 
-# threading_enabled = True
-threading_enabled = False
+threading_enabled = config_yaml["testbed_config"]["threading_enabled"]
+# threading_enabled = False

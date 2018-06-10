@@ -1,9 +1,13 @@
 # pbft core configurations
 # name: pbft base configuration
-nodes:
+testbed_config:
   total: 5 # excluding base client
   client_id: 5 # total-1 => 0-indexed
   server_id_init: 4 # => 0 indexed
+  threading_enabled: true
+  requests:
+    max: 256
+    batch_size: 32
 general:
   max_fail: 1
   base_port: 49500

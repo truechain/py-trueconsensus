@@ -1,6 +1,8 @@
-import request_pb2
+#!/bin/env python
+
 # import proto_message as message
 import socket
+import os
 import sys
 import struct
 import threading
@@ -9,10 +11,12 @@ import time
 import socks
 # import time
 
+import request_pb2
 from config import client_address, \
     client_id, \
     RL, \
-    client_logger
+    client_logger, \
+    config_general
 # N, TOR_SOCKSPORT
 
 kill_flag = False
@@ -71,7 +75,11 @@ else:
 t = threading.Thread(target=recv_response, args=[n])
 t.daemon = True
 t.start()
-m = open("reqs.dat", "rb").read()
+requests_loc = os.path.join(
+    config_general.get("node", "ledger_location"),
+    "reqs.dat"
+)
+m = open(requests_loc, "rb").read()
 
 client_logger.info("Loaded Messages")
 client_logger.info("Starting send for bufflen %s" % len(m))
