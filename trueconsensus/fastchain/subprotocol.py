@@ -29,6 +29,15 @@ SIG_SIZE = 64
 HASH_SIZE = 32
 
 
+class Mempools(object):
+    def __init__(self):
+        self.txpool = []
+
+    # def __repr__(self):
+    #     return "Fork(mempool) --> snailpool"
+
+
+
 class SubProtoDailyBFT(object):
     '''
     Subprotocol Daily BFT[R]
@@ -54,8 +63,8 @@ class SubProtoDailyBFT(object):
 
     def stop(self):
         # TODO: add signal / queue
-        for BFTpk in self.nodes:
-
+        # for BFTpk in self.nodes:
+        pass
 
     def start(self, comm):
 

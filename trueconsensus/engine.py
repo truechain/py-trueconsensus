@@ -13,3 +13,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from snailchain import SnailChain
+from fastchain.bft import NodeBFT, \
+    ViewChangeInit, \
+    LedgerLog, \
+    BFTcommittee, \
+    SubProtoDailyBFT, \
+    Mempools
+
+
+class DailyOffChainConsensus(object):
+    def __init__(self):
+        self.chain = []
+        self._lambda = None
+
+    def preproess(self):
+        pass

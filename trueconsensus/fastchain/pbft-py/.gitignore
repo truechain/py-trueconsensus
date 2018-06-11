@@ -1,0 +1,15 @@
+*.pyc
+*log.txt
+*.out
+venv/
+__pycache__
+
+google/
+
+keys/
+
+*_commits.txt
+tx*.txt
+bank*.txt
+log/
+*.dat

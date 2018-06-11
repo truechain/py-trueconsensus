@@ -21,9 +21,11 @@ import uuid
 import random
 from db.backends.level import LevelDB
 
-from logging import ledger
+# from logging import ledger
 
+from fastchain.node import Node
 from collections import OrderedDict, \
+    defaultdict, \
     namedtuple
 
 
@@ -48,7 +50,7 @@ def generate_txns(R, l):
 #     return uuid.uuid4().hex
 
 
-class Node(object):
+class NodeBFT(Node):
     '''
     @types:
     committee member
@@ -81,9 +83,9 @@ class ViewChangeInit(object):
         pass
 
 
-def LedgerLog(object):
-    pass
-
+class LedgerLog(object):
+    def __init__(self):
+        pass
 
 class BFTcommittee(object):
     '''
