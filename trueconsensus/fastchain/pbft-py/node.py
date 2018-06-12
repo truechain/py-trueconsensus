@@ -998,6 +998,8 @@ class node:
                                     break
                                 self.buffmap[fd] = self.buffmap[fd][size+4:]
                             else:
+                                # TODO: check if remaining buffmap of slice
+                                # less than size+4 as leftover crumbs
                                 break
             if self.kill_flag:
                 sys.exit()

@@ -21,3 +21,5 @@ client = (("127.0.0.1", 8101))
 # KEY DIRECTORY
 KD = os.getcwd() + "/keys"
 print KD
+
+# threading_enabled = False
