@@ -64,6 +64,7 @@ def gen_requests(max_requests, batch_size, f):
         backspace(len(s))
         # time.sleep(0.02)
 
+
 if __name__ == '__main__':
     max_requests = config_yaml["testbed_config"]["requests"]["max"]
     batch_size = config_yaml["testbed_config"]["requests"]["batch_size"]
