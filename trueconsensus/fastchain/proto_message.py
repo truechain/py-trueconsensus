@@ -7,7 +7,16 @@ import ecdsa_sig as sig
 from config import _logger
 
 
-def add_sig(key,id,seq,view,type,message,timestamp = None):
+def add_sig(key, id, seq, view, type, message, timestamp=None):
+    """
+    @key
+    @id
+    @seq
+    @view
+    @type
+    @message
+    @timestamp
+    """
     #key = sig.get_signing_key(id)
     req = request_pb2.Request()
     inner = req.inner

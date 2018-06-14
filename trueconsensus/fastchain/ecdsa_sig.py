@@ -63,10 +63,12 @@ def verify_proto_key(key, dig1, message):
 def get_key_path(i, ktype):
     try:
         KEY_NAME = ktype + str(i) + ASYMM_FILE_FORMATS[ktype]
-        _logger.info("KPATH - FETCH - %s -- %s" % (ktype, KEY_NAME))
+        # _logger.info("KPATH - FETCH - %s -- %s" % (ktype, KEY_NAME))
         return os.path.join(KD, KEY_NAME)
+    # generic catch
     except Exception as E:
-        quit(E)
+        _logger.error(E)
+        return
         # raise
 
 
@@ -85,13 +87,23 @@ def write_new_keys(n):
 
 def get_asymm_key(i, ktype=None):
     kpath = get_key_path(i, ktype)
-    if not os.path.isfile(kpath):
-        msg = "can't find key file: %s" % kpath
-        _logger.error(msg)
-        sys.exit(msg)
-    key_pem = open(kpath, 'rb').read()
-    return ASYMM_FUNC_MAP[ktype](key_pem)
+    found_error = False
+    try:
+        if not os.path.isfile(kpath):
+            result = "File Not Found: %s" % kpath
+            _logger.error(result)
+            found_error = True
+        else:
+            key_pem = open(kpath, 'rb').read()
+            result = ASYMM_FUNC_MAP[ktype](key_pem)
+    except Exception as result:
+        found_error = True
 
+    if found_error:
+        _logger.error("%s" % result)
+        return
+
+    return result
 #
 # def get_verifying_key(i):
 #     kpath = get_key_path(i, "verify")

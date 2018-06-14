@@ -83,7 +83,7 @@ class node:
         #        print("-------------")
         sys.exit()
 
-    def __init__(self, id, view, N, max_requests=None):
+    def __init__(self, id, view, N, committee_addresses=[], max_requests=None):
         self.max_requests = max_requests
         self.kill_flag = False
         # self.ecdsa_key = ecdsa_sig.get_asymm_key(0, "verify")
@@ -144,6 +144,7 @@ class node:
         # self.key_dict = {}
         self.replica_map = {}
         self.bank = bank.bank(id, 1000)
+        self.committee_ids = committee_addresses
 
         self.request_types = {
             "REQU": self.process_client_request,
@@ -267,6 +268,8 @@ class node:
     # type, seq, message, (optional) tag request
     def create_request(self, req_type, seq, msg, outer_req=None):
         key = get_asymm_key(self.id, ktype="sign")
+        if not bool(key):
+            return
         # import pdb; pdb.set_trace()
         msg = bytes(msg, encoding='utf-8')
         m = message.add_sig(key, self.id, seq, self.view, req_type, msg)
@@ -327,6 +330,8 @@ class node:
         t.cancel()
 
         key = get_asymm_key(self.id, ktype="sign")
+        if not bool(key):
+            return
         #time.sleep(1)
         #rc = ecdsa_sig.verify(self.ecdsa_key, self.hello_sig, "Hello world!")
         #cond.acquire()
@@ -385,8 +390,8 @@ class node:
     def process_init(self, req, fd):
         if req.inner.id < 0:
             return None
-        #TODO: fix this so we can do crash recovery
-        if not req.inner.id in self.replica_map:
+        # TODO: fix this so we can do crash recovery
+        if req.inner.id not in self.replica_map:
             self.replica_map[req.inner.id] = self.fdmap[fd]
         else:
             if req.inner.id > self.id:
@@ -401,28 +406,28 @@ class node:
 
     # TODO: requests that reuse timestamps are ignored
     def in_client_history(self, req):
-        if not req.inner.id in self.client_message_log:
+        if req.inner.id not in self.client_message_log:
             return False
-        if not req.inner.timestamp in self.client_message_log[req.inner.id]:
+        if req.inner.timestamp not in self.client_message_log[req.inner.id]:
             return False
         return True
 
     def add_client_history(self, req):
-        if not req.inner.id in self.client_message_log:
-            self.client_message_log[req.inner.id] = {req.inner.timestamp : req}
+        if req.inner.id not in self.client_message_log:
+            self.client_message_log[req.inner.id] = {req.inner.timestamp: req}
         else:
             self.client_message_log[req.inner.id][req.inner.timestamp] = req
 
-    #TODO
+    # TODO
     def handle_timeout(self, dig, view):
         self.lock.acquire()
         if self.view > view:
             return
         print("TIMEOUT TRIGGERED")
         # Cancel all other timers
-        client_req,t,fd = self.active[dig]
+        client_req, t, fd = self.active[dig]
         for key, value in self.active.iteritems():
-            client_req,t,fd = value
+            client_req, t, fd = value
             if key != dig:
                 t.cancel()
         self.view += 1
@@ -434,7 +439,7 @@ class node:
         for i in self.checkpoint_proof:
             msg += serialize(i)
 
-        #[type][seq][id] -> req
+        # [type][seq][id] -> req
 
         # for each prepared request
         for sequence, digest in self.prepared.iteritems():
@@ -456,8 +461,8 @@ class node:
         m = self.create_request("VCHA", self.last_stable_checkpoint, msg)
         self.broadcast_to_nodes(m)
         self.process_view_change(m, 0)
-        #TODO start a time for the view change operation
-        #TODO set flag to stop processing requests
+        # TODO start a time for the view change operation
+        # TODO set flag to stop processing requests
 
     def process_client_request(self, req, fd):
         _logger.info("Phase - PROCESS CLIENT REQ - fd [%s]" % fd)
@@ -493,7 +498,7 @@ class node:
             self.add_node_history(m)
             record_pbft(self.debuglog, m)
             self.broadcast_to_nodes(m)
-        #TODO: if client sends to a backup, retransmit to primary
+        # TODO: if client sends to a backup, retransmit to primary
         # or not..... maybe better to save bandwidth
 
 
@@ -506,8 +511,8 @@ class node:
     def inc_comm_dict(self, digest):
         if digest in self.comm_dict:
             self.comm_dict[digest].number += 1
-            #self.comm_dict[digest].seq = seq
-            #self.comm_dict[digest].id_list.append(id)
+            # self.comm_dict[digest].seq = seq
+            # self.comm_dict[digest].id_list.append(id)
         else:
             self.comm_dict[digest] = req_counter()
 
@@ -550,6 +555,8 @@ class node:
                 client_req.ParseFromString(req.outer)
                 record_pbft(self.debuglog, client_req)
                 client_key = get_asymm_key(client_req.inner.id, ktype="sign")
+                if not bool(client_key):
+                    return
                 client_req = message.check(client_key, client_req)
                 if client_req == None or req.inner.msg != client_req.dig:
                     _logger.warn("FAILED PRPR OUTER SIGCHECK")
@@ -559,8 +566,8 @@ class node:
                 raise
         else:
             client_req = None
-        if not req.inner.msg in self.active:
-            #self.active[req.inner.msg] = (client_req, Timer(self.timeout, self.handle_timeout), fd)
+        if req.inner.msg not in self.active:
+            # self.active[req.inner.msg] = (client_req, Timer(self.timeout, self.handle_timeout), fd)
             request_timer = Timer(self.timeout, self.handle_timeout, [req.inner.msg, req.inner.view])
             request_timer.daemon = True
             request_timer.start()
@@ -614,8 +621,8 @@ class node:
             self.execute_in_order(req)
 
 
-    #rc = vprocess_checkpoints(vcheck_list, r.inner.seq)
     def vprocess_checkpoints(self, vcheck_list, last_checkpoint):
+        #rc = vprocess_checkpoints(vcheck_list, r.inner.seq)
         if last_checkpoint == 0:
             return True
         if len(vcheck_list) <= 2*self.f:
@@ -637,6 +644,8 @@ class node:
                 return False,0
             dig = vpre_dict[k1].inner.msg
             key = get_asymm_key(vpre_dict[k1].inner.id, ktype="sign")
+            if not bool(key):
+                return
             r = message.check(key, vpre_dict[k1])
             if r == None:
                 return False,0
@@ -644,6 +653,8 @@ class node:
             for k2,v2 in v1.iteritems():
                 # check sigs
                 key = get_asymm_key(v2.inner.id, ktype="sign")
+                if not bool(key):
+                    return
                 r = message.check(key,v2)
                 if r == None:
                     return False,0
@@ -669,7 +680,7 @@ class node:
         return True,max
 
     def in_view_dict(self,req):
-        if not req.inner.view in self.view_dict:
+        if req.inner.view not in self.view_dict:
             return False
         for m in self.view_dict[req.inner.view][0]:
             if m.inner.id == req.inner.id:
@@ -701,29 +712,31 @@ class node:
         # for each chkp, prpr, prep message it contains
         while len(m) > 0:
             b = m[:4]
-            size = struct.unpack("!I",b)[0]
+            size = struct.unpack("!I", b)[0]
             try:
             #if True:
                 r2 = request_pb2.Request()
                 r2.ParseFromString(m[4:size+4])
                 record_pbft(self.debuglog, r2)
                 key = get_asymm_key(r2.inner.id, ktype="sign")
-                r2 = message.check(key,r2)
-                if r2 == None:
+                if not bool(key):
+                    return
+                r2 = message.check(key, r2)
+                if r2 is None:
                     print("FAILED SIG CHECK IN VIEW CHANGE")
                     return
-            except:
+            except Exception as E:
             #else:
                 r2 = None
-                print("FAILED PROTOBUF EXTRACT IN VIEW CHANGE")
+                print("FAILED PROTOBUF EXTRACT IN VIEW CHANGE: %s" % E)
                 raise
                 return
 
             if r2.inner.type == "CHKP":
                 vcheck_list.append(r2)
             if r2.inner.type == "PREP":
-                if not r2.inner.seq in vprep_dict:
-                    vprep_dict[r2.inner.seq] = {r2.inner.id : r2}
+                if r2.inner.seq not in vprep_dict:
+                    vprep_dict[r2.inner.seq] = {r2.inner.id: r2}
                 else:
                     vprep_dict[r2.inner.seq][r2.inner.id] = r2
             if r2.inner.type == "PRPR":
@@ -777,6 +790,8 @@ class node:
     def nvprocess_prpr(self, prpr_list):
         for r in prpr_list:
             key = get_asymm_key(r.inner.id, ktype="sign")
+            if not bool(key):
+                return
             m = message.check(key, r)
             if m == None:
                 return False
@@ -792,6 +807,8 @@ class node:
     def nvprocess_view(self, vchange_list):
         for r in vchange_list:
             key = get_asymm_key(r.inner.id, ktype="sign")
+            if not bool(key):
+                return
             m = message.check(key, r)
             if m == None:
                 return False
@@ -815,6 +832,8 @@ class node:
                 r2.ParseFromString(m[4:size+4])
                 record_pbft(self.debuglog, r2)
                 key = get_asymm_key(r2.inner.id, ktype="sign")
+                if not bool(key):
+                    return
                 r2 = message.check(key, r2)
                 if r2 == None:
                     _logger.warn("FAILED SIG CHECK IN NEW VIEW")
@@ -850,18 +869,18 @@ class node:
 
     # [type][seq][id] -> request
     def add_node_history(self, req):
-        if not req.inner.type in self.node_message_log:
+        if req.inner.type not in self.node_message_log:
             self.node_message_log[req.inner.type] = {req.inner.seq : {req.inner.id : req}}
         else:
-            if not req.inner.seq in self.node_message_log[req.inner.type]:
+            if req.inner.seq not in self.node_message_log[req.inner.type]:
                 self.node_message_log[req.inner.type][req.inner.seq] = {req.inner.id : req}
             else:
                 self.node_message_log[req.inner.type][req.inner.seq][req.inner.id] = req
 
     def in_node_history(self, req):
-        if not req.inner.type in self.node_message_log:
+        if req.inner.type not in self.node_message_log:
             return False
-        if not req.inner.seq in self.node_message_log[req.inner.type]:
+        if req.inner.seq not in self.node_message_log[req.inner.type]:
             return False
         if req.inner.id in self.node_message_log[req.inner.type][req.inner.seq]:
             return True
@@ -876,17 +895,22 @@ class node:
             req.ParseFromString(request_bytes)
             record_pbft(self.debuglog, req)
             key = get_asymm_key(req.inner.id, ktype="sign")
-            req = message.check(key, req)
-            if req == None:
-                _logger.error("FAILED SIG CHECK SOMEWHERE")
+            if not bool(key):
                 return
-        except:
+            # if not isinstance(key, ecdsa.SigningKey):
+            if not bool(key):
+                return
+            req = message.check(key, req)
+            if req is None:
+                _logger.error("Failed message sig check. 'req' is empty..")
+                return
+        except Exception as E:
             req = None
-            _logger.error("ERROR IN PROTOBUF TYPES")
-            raise  # for debug
+            _logger.error("ERROR IN PROTOBUF TYPES: %s" % E)
+            # raise  # for debug
             self.clean(fd)
             return
-        #print(req.inner.type, len(request_bytes))
+        # print(req.inner.type, len(request_bytes))
         # TODO: Check for view number and view change, h/H
         if req.inner.view != self.view or not self.view_active:
             if req.inner.type != "VCHA" and req.inner.type != "NEVW" and \
@@ -901,9 +925,10 @@ class node:
                 return
         if self.in_node_history(req):
             _logger.warn("Duplicate node message")
-            #return
+            # return
             pass
         if req.inner.type in self.request_types and not self.in_client_history(req):
+            # call to actual success
             self.request_types[req.inner.type](req, fd)
         else:
             self.clean(fd)
@@ -925,8 +950,8 @@ class node:
         """
         counter = 0
 
-        #self.fdmap[s.fileno] = s
-        #self.p.register(s, recv_mask)
+        # self.fdmap[s.fileno] = s
+        # self.p.register(s, recv_mask)
         s = self.replica_map[self.id]
         _logger.debug("------------ INIT SERVER LOOP [ID: %s]-------------" % self.id)
         t = Timer(5, self.try_client, args=[self.id])
@@ -936,6 +961,8 @@ class node:
             events = self.p.poll()
             _logger.debug("Polling events queue -> %s" % events)
             #cstart = time.time()
+
+            # import pdb; pdb.set_trace()
             for fd, event in events:
                 counter += 1
                 # need the flag for "Service temporarilly unavailable" exception
@@ -970,7 +997,8 @@ class node:
                         try:
                             data = self.fdmap[fd].recv(BUF_SIZE)
                             recv_flag = True
-                        except:
+                        except Exception as E:
+                            _logger.debug(E)
                             self.clean(fd)
                             continue
                         #except socket.error, serr:
@@ -979,22 +1007,25 @@ class node:
                         #self.clean(fd)
                     if not data and recv_flag:
                         try:
-                            _logger.debug("Closing connection from %s " % self.fdmap[fd].getpeername())
-                        except:
-                            _logger.debug("Closing connection %s " % fd)
+                            peer_address = ":".join(str(i) for i in self.fdmap[fd].getpeername())
+                            _logger.debug("Closing connection from: event fd [%s] - ID [%s] - Address %s" % (fd, self.id, peer_address))
+                        except Exception as E:
+                            _logger.debug("Closing connection %s error - %s" % (fd, E))
                         self.clean(fd)
                     elif recv_flag:
-                        _logger.debug("Chunk Length: %s" % len(data))# .decode('latin-1')))
-                        self.buffmap[fd] += data#.decode('latin-1')
+                        _logger.debug("Chunk Length: %s" % len(data))  # .decode('latin-1')))
+                        self.buffmap[fd] += data  # .decode('latin-1')
                         while(len(self.buffmap[fd]) > 3):
                             try:
                                 size = struct.unpack("!I", self.buffmap[fd][:4])[0]
-                            except:
-                                import pdb; pdb.set_trace()
+                            except Exception as E:
+                                _logger.debug(E)
+                                break
+                                # import pdb; pdb.set_trace()
 
                             if len(self.buffmap[fd]) >= size+4:
                                 self.parse_request(self.buffmap[fd][4:size+4], fd)
-                                if not fd in self.buffmap:
+                                if fd not in self.buffmap:
                                     break
                                 self.buffmap[fd] = self.buffmap[fd][size+4:]
                             else:
