@@ -14,11 +14,11 @@ import select
 from threading import Timer, Thread, Lock, Condition
 
 # import sig
-import bank
-from ecdsa_sig import get_asymm_key
-import request_pb2
-import proto_message as message
-from config import config_general, \
+from dapps import bank
+from fastchain.ecdsa_sig import get_asymm_key
+from proto import request_pb2, \
+    proto_message as message
+from fastchain.config import config_general, \
     RL, \
     client_address, \
     _logger
@@ -65,23 +65,15 @@ def record_pbft(file, request):
     record(file, msg)
 
 
-class node:
-    def debug_print_bank(self, signum, flag):
-        _logger.info("wait queue length: %s" % len(self.waiting))
-        _logger.info("last executed: %s" % self.last_executed)
-        self.bank.print_balances()
-        # m = self.create_request("REQU", 0, "replica " + str(self.id) + " going down", 0)
-        # self.broadcast_to_nodes(m)
-        # for i,s in self.replica_map.iteritems():
-        #    try:
-        #        s.send(serialize(m))
-        #        print("sent to ", i)
-        #        print("-------------")
-        #    except:
-        #        print("could not send to ", i)
-        #        #print(traceback.format_exc())
-        #        print("-------------")
-        sys.exit()
+class Node(object):
+    '''
+    Main Node responsible for handling following PBFT phases:
+    - request
+    - pre-prepare
+    - prepare
+    - commit
+    - reply
+    '''
 
     def __init__(self, id, view, N, committee_addresses=[], max_requests=None):
         self.max_requests = max_requests
@@ -168,6 +160,23 @@ class node:
             "replica" + str(self.id) + "_log.txt"
         )
         self.debuglog = open(replcia_log_loc, 'w', 1)
+
+    def debug_print_bank(self, signum, flag):
+        _logger.info("wait queue length: %s" % len(self.waiting))
+        _logger.info("last executed: %s" % self.last_executed)
+        self.bank.print_balances()
+        # m = self.create_request("REQU", 0, "replica " + str(self.id) + " going down", 0)
+        # self.broadcast_to_nodes(m)
+        # for i,s in self.replica_map.iteritems():
+        #    try:
+        #        s.send(serialize(m))
+        #        print("sent to ", i)
+        #        print("-------------")
+        #    except:
+        #        print("could not send to ", i)
+        #        #print(traceback.format_exc())
+        #        print("-------------")
+        sys.exit()
 
     def reset_message_log(self):
         # message log for node communication related to the PBFT protocol:
@@ -953,7 +962,7 @@ class node:
         # self.fdmap[s.fileno] = s
         # self.p.register(s, recv_mask)
         s = self.replica_map[self.id]
-        _logger.debug("------------ INIT SERVER LOOP [ID: %s]-------------" % self.id)
+        _logger.debug("\n%s INIT SERVER LOOP [ID: %s] %s" % ('-'*20, self.id, '-'*20))
         t = Timer(5, self.try_client, args=[self.id])
         t.start()
         while True:

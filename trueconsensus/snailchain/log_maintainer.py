@@ -1,4 +1,4 @@
-from fastchain.config import _logger
+from config import _logger
 
 # import logging
 

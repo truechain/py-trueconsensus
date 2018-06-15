@@ -6,7 +6,7 @@ This is a `Practical Byzantine Fault Tolerance` implementation of Miguel Castro 
 
 #### Configure paths and tunables
 
-Fill up the config files `pbft_logistics.cfg` and `pbft_tunables.yaml` or use defaults.
+Fill up the config files `conf/pbft_logistics.cfg` and `conf/pbft_tunables.yaml` or use defaults.
 
 #### Install dependencies
 
@@ -33,19 +33,22 @@ OR
 Then proceed as follows:
 
 ```
-# generate requests_pb2.py from requests.proto file
-./proto.sh
+# change to folder trueconsensus
+cd trueconsensus/
+
+# generate proto/requests_pb2.py from proto/requests.proto file
+./utils/generate_proto.sh
 
 # generate asymm keypairs
-python make_keys.py
+python -m utils.make_keys
 
 # generate requests
-./generate_requests_dat.py 
+python -m utils.generate_requests_dat
 ```
 
 ### Run
 
-Server: `./server.py`
+Server: `./engine.py`
 
 Client: `./client.py`
 

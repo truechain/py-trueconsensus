@@ -17,16 +17,14 @@
 # import os
 # import sys
 import ecdsa
-
-# from logging import Log
-from ecdsa_sig import generate_keys
 # from collections import defaultdict
-from bft import Node
 
+from fastchain.ecdsa_sig import generate_keys
+from fastchain.node import Node
 
-C = ecdsa.NIST256p
-SIG_SIZE = 64
-HASH_SIZE = 32
+# C = ecdsa.NIST256p
+# SIG_SIZE = 64
+# HASH_SIZE = 32
 
 
 class Mempools(object):
@@ -67,7 +65,7 @@ class SubProtoDailyBFT(object):
         pass
 
     def start(self, comm):
-
+        pass
 
     def forkVirtualNode(self):
         BFTpk = Node()

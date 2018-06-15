@@ -9,7 +9,7 @@ import configparser
 # from pykwalify import errors as pykwalify_errors
 from logging.handlers import RotatingFileHandler
 
-from local_config import CFG_YAML_PATH, \
+from fastchain.local_config import CFG_YAML_PATH, \
     CFG_GENERAL_PATH, \
     PEER_NETWORK_FILE
 

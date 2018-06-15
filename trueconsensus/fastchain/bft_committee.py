@@ -19,16 +19,20 @@
 import os
 import uuid
 import random
-import ecdsa_sig as sig
 from db.backends.level import LevelDB
 
-from fastchain.config import LAMBDA, config_yaml
+from fastchain import ecdsa_sig as sig
+from fastchain.log_maintainer import LedgerLog
+from fastchain.config import config_yaml
 # from logging import ledger
 
 from fastchain.node import Node
+
 from collections import OrderedDict, \
     defaultdict, \
-    namedtuple
+    namedtuple  # for transaction tuple, use struct?
+
+LAMBDA = config_yaml['bft_committee']['lambda']
 
 
 def generate_block(genesis=True):
@@ -46,6 +50,15 @@ def generate_txns(R, l):
 
 # def genkey():
 #     return uuid.uuid4().hex
+
+
+class DailyOffChainConsensus(object):
+    def __init__(self):
+        self.chain = []
+        self._lambda = None
+
+    def preproess(self):
+        pass
 
 
 class NodeBFT(Node):
@@ -67,8 +80,12 @@ class NodeBFT(Node):
     def __init__(self, id=None, type=None):
         self.NodeId = id
         self._type = 'BFTmember'
-        self.new_row = namedtuple('row', ['R','l','txn'])
+        self.new_row = namedtuple('row', ['R', 'l', 'txn'])
+        # TODO: maybe use ctypes.Structure or struct.Struct ?
         self.nonce = 0
+
+    def launch_boot_nodes(self):
+        return
 
     def log_to_snailchain(self):
         return
@@ -109,7 +126,6 @@ class BFTcommittee(object):
         start = time.time()
         while true:
             response = VC.wait_for_reply()
-            if
             if response is not None:
                 break
         return
@@ -162,3 +178,4 @@ class BFTcommittee(object):
         pass
 
     def update_mempool_subprotocol(self):
+        pass

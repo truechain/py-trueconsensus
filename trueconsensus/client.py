@@ -11,8 +11,8 @@ import time
 import socks
 # import time
 
-import request_pb2
-from config import client_address, \
+from proto import request_pb2
+from fastchain.config import client_address, \
     client_id, \
     RL, \
     client_logger, \

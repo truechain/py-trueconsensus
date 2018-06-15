@@ -7,7 +7,7 @@ import hashlib
 # import logging
 # from trueconsensus.fastchain.config import KD
 
-from config import KD, \
+from fastchain.config import KD, \
     _logger
 
 C = ecdsa.NIST256p
@@ -83,7 +83,9 @@ def write_new_keys(n):
         v_file.write(vk.to_pem())
     s_file.close()
     v_file.close()
-
+    msg = "written new keys to %s" % KD
+    _logger.info(msg)
+    return msg
 
 def get_asymm_key(i, ktype=None):
     kpath = get_key_path(i, ktype)

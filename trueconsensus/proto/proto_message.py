@@ -2,9 +2,9 @@ from Crypto.Hash import SHA256
 import struct
 
 # import sig
-import request_pb2
-import ecdsa_sig as sig
-from config import _logger
+from proto import request_pb2
+from fastchain import ecdsa_sig as sig
+from fastchain.config import _logger
 
 
 def add_sig(key, id, seq, view, type, message, timestamp=None):

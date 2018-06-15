@@ -7,13 +7,13 @@ import random
 import struct
 
 # import sig
-import ecdsa_sig
-from config import client_id, \
+from fastchain import ecdsa_sig
+from fastchain.config import client_id, \
     config_yaml, \
     config_general, \
     N
 # import request_pb2
-import proto_message as message
+import proto.proto_message as message
 
 
 def backspace(n):
