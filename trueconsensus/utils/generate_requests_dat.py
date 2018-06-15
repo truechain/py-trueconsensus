@@ -7,13 +7,13 @@ import random
 import struct
 
 # import sig
-import ecdsa_sig
-from config import client_id, \
+from fastchain import ecdsa_sig
+from fastchain.config import client_id, \
     config_yaml, \
     config_general, \
     N
 # import request_pb2
-import proto_message as message
+import proto.proto_message as message
 
 
 def backspace(n):
@@ -63,6 +63,7 @@ def gen_requests(max_requests, batch_size, f):
         print(s, end='')
         backspace(len(s))
         # time.sleep(0.02)
+
 
 if __name__ == '__main__':
     max_requests = config_yaml["testbed_config"]["requests"]["max"]

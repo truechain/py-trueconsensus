@@ -4,6 +4,9 @@ Refer to:
 https://arxiv.org/abs/1805.01457
 https://eprint.iacr.org/2016/917.pdf
 
+## Run
+
+Refer to `trueconsensus/README.md` for further instructions
 
 ### Parameterized by following..
 

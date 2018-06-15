@@ -1,5 +1,5 @@
-import proto_message as message
-from config import config_general
+from proto import proto_message as message
+from fastchain.config import config_general
 
 
 class bank:

@@ -1,5 +1,5 @@
 # WIP
-from bft
+from trueconsensus.fastchain import bft
 
 if __name__ == "__main__":
 
