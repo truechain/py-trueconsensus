@@ -2,5 +2,5 @@
 Package import structure
 '''
 
-from fastchain.bft_committee import *
-from fastchain.node import *
+from trueconsensus.fastchain.bft_committee import *
+from trueconsensus.fastchain.node import *

@@ -7,7 +7,7 @@ import hashlib
 # import logging
 # from trueconsensus.fastchain.config import KD
 
-from fastchain.config import KD, \
+from trueconsensus.fastchain.config import KD, \
     _logger
 
 C = ecdsa.NIST256p
@@ -103,7 +103,7 @@ def get_asymm_key(i, ktype=None):
 
     if found_error:
         _logger.error("%s" % result)
-        return
+        return None
 
     return result
 #

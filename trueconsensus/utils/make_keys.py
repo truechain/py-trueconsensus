@@ -2,8 +2,8 @@
 
 # import sys
 
-from fastchain import ecdsa_sig as sig
-from fastchain.config import N
+from trueconsensus.fastchain import ecdsa_sig as sig
+from trueconsensus.fastchain.config import N
 
 
 if __name__ == "__main__":

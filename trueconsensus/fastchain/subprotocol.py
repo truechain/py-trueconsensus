@@ -19,8 +19,8 @@
 import ecdsa
 # from collections import defaultdict
 
-from fastchain.ecdsa_sig import generate_keys
-from fastchain.node import Node
+from trueconsensus.fastchain.ecdsa_sig import generate_keys
+from trueconsensus.fastchain.node import Node
 
 # C = ecdsa.NIST256p
 # SIG_SIZE = 64

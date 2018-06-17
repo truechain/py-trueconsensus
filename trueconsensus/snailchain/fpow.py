@@ -24,4 +24,7 @@ class SnailChain(object):
     LOG = None
 
     def __init__(self):
-        pass
+        # TODO: calculate csize and sec_param
+        self.chain_size = R * csize + LAMBDA
+        self.chain = []
+        

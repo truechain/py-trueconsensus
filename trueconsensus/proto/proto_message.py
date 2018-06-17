@@ -2,9 +2,9 @@ from Crypto.Hash import SHA256
 import struct
 
 # import sig
-from proto import request_pb2
-from fastchain import ecdsa_sig as sig
-from fastchain.config import _logger
+from trueconsensus.proto import request_pb2
+from trueconsensus.fastchain import ecdsa_sig as sig
+from trueconsensus.fastchain.config import _logger
 
 
 def add_sig(key, id, seq, view, type, message, timestamp=None):
@@ -49,7 +49,7 @@ def check(key, req):
     h = SHA256.new()
     h.update(i)
     digest = h.digest()
-    _logger.debug("check(%s) against (%s)" % (key, req))
+    # _logger.debug("check(%s) against (%s)" % (key, req))
     s = (sig.verify_proto_key(key, sig_recv, digest_recv) and digest == digest_recv)
     if s:
         return req

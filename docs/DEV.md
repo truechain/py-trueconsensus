@@ -9,7 +9,7 @@ Collection of sommon common errors while coding, for troubleshooting:
 
 ```
 TypeError: a bytes-like object is required, not 'str'
-DEBUG:pbft_complete_run.log:--> Trying client ('127.0.0.1..
+DEBUG:trueconsensus_engine.log:--> Trying client ('127.0.0.1..
 ```
 
 Your log file write mode was `wb` instead of `w`.
@@ -29,7 +29,7 @@ Your log file write mode was `wb` instead of `w`.
   File "/home/arcolife/workspace/projects/Truechain/forked/py-trueconsensus/trueconsensus/fastchain/pbft-py/venv/lib64/python3.6/hmac.py", line 42, in __init__
     raise TypeError("key: expected bytes or bytearray, but got %r" % type(key).__name__)
 TypeError: key: expected bytes or bytearray, but got 'SigningKey'
-DEBUG:pbft_complete_run.log:--> Trying client ('127.0.0.1', 49504) from server ID: 3 
+DEBUG:trueconsensus_engine.log:--> Trying client ('127.0.0.1', 49504) from server ID: 3 
 ```
 
 Make the following changes:

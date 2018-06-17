@@ -11,16 +11,16 @@ import time
 import socks
 # import time
 
-from proto import request_pb2
-from fastchain.config import client_address, \
-    client_id, \
+from trueconsensus.proto import request_pb2
+from trueconsensus.fastchain.config import CLIENT_ADDRESS, \
+    CLIENT_ID, \
     RL, \
     client_logger, \
     config_general
 # N, TOR_SOCKSPORT
 
 kill_flag = False
-start_time = 0
+start_time = time.time()
 
 
 def recv_response(n):
@@ -29,12 +29,12 @@ def recv_response(n):
     print("RECEIVING")
     s = socket.socket()
     p = select.epoll()
-    ip, port = client_address
+    ip, port = CLIENT_ADDRESS
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.setblocking(0)
     s.bind(('0.0.0.0', port))
     s.listen(50)
-    client_logger.info("Client [%s] listening on port %s" % (client_id, port))
+    client_logger.info("Client [%s] listening on port %s" % (CLIENT_ID, port))
     client_logger.info("Client IP: %s" % ip)
     p.register(s)
     # f = open("client_log.txt", 'w')
@@ -46,6 +46,7 @@ def recv_response(n):
         client_logger.info("Current events queue: %s" % events)
         for fd, event in events:
             c, addr = s.accept()
+            client_logger.debug("fd [%s] event [%s] addr [%s]" % (fd, event, addr))
             r = c.recv(4096)
             # size = struct.unpack("!I", r[:4])[0]
             req = request_pb2.Request()
@@ -58,10 +59,11 @@ def recv_response(n):
             count += 1
             if req.inner.seq % 100 == 0:
             #if True:
-                client_logger.debug("CLIENT [%s] SEQUENCE:" % (client_id, req.inner.seq))
+                client_logger.debug("CLIENT [%s] SEQUENCE: %s" % (CLIENT_ID, req.inner.seq))
         #if req.inner.seq == n:
         if count == n * len(RL):
             kill_flag = True
+            end_time = time.time()
             client_logger.debug('CLIENT [%s] total time spent with chain: %s' % (end_time - start_time))
             # f.close()
 

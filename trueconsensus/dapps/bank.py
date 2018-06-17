@@ -1,5 +1,5 @@
-from proto import proto_message as message
-from fastchain.config import config_general
+from trueconsensus.proto import proto_message as message
+from trueconsensus.fastchain.config import config_general
 
 
 class bank:

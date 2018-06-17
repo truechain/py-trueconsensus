@@ -5,15 +5,16 @@ import sys
 import socket
 import random
 import struct
+from collections import defaultdict
 
 # import sig
-from fastchain import ecdsa_sig
-from fastchain.config import client_id, \
+from trueconsensus.fastchain import ecdsa_sig
+from trueconsensus.fastchain.config import CLIENT_ID, \
     config_yaml, \
     config_general, \
     N
 # import request_pb2
-import proto.proto_message as message
+import trueconsensus.proto.proto_message as message
 
 
 def backspace(n):
@@ -23,24 +24,32 @@ def backspace(n):
 
 
 def gen_requests(max_requests, batch_size, f):
-    client_key_pub = ecdsa_sig.get_asymm_key(client_id-1, ktype='verify')
-    client_key_pem = ecdsa_sig.get_asymm_key(client_id-1, ktype='sign')
+    client_key_pub = ecdsa_sig.get_asymm_key(CLIENT_ID-1, ktype='verify')
+    client_key_pem = ecdsa_sig.get_asymm_key(CLIENT_ID-1, ktype='sign')
+    keys_to_seq_tracker = defaultdict.fromkeys(range(N), 0)
     for i in range(max_requests):
         # print("for request: [%s]" % i)
         r = random.randint(1, max_requests)
         r2 = random.randint(max_requests/2, max_requests)
         # amount = random.randint(0,100)
         amount = 50
-        msg = "TRAN%s%s%s" % (
+        msg = "TRAN%s%s" % (
             str(amount).zfill(4),
             str(r2).zfill(4),
-            client_key_pub.to_string().decode('latin1')
+            #.decode('latin1')
         )
+        msg = bytes(msg, encoding="utf-8") + client_key_pub.to_string()
         if i == 0:
             print(len(client_key_pub.to_string()), "ECDSA")
-        current_key = ecdsa_sig.get_asymm_key(r%N, ktype='sign')
+        
+        _id = r%N
+        # print("current ID: ", _id)
+        current_key = ecdsa_sig.get_asymm_key(_id, ktype='sign')
         # import pdb; pdb.set_trace()
-        req = message.add_sig(current_key, r, 0, 0, "REQU", msg.encode('utf-8'), i)
+        seq = keys_to_seq_tracker[_id]
+        view = 0 # TODO: do we even need view in request from client??
+        req = message.add_sig(current_key, _id, seq, view, "REQU", msg, i)
+        keys_to_seq_tracker[_id] += 1  # Increase seq count since same node might send another request
         req.sig = client_key_pem.to_string()
         msg = req.SerializeToString()
         if i == 0:
@@ -51,7 +60,7 @@ def gen_requests(max_requests, batch_size, f):
         #msg += "x" * (400 - len(msg))
         msg += msg * (batch_size-1)
         ################################
-        temp = message.add_sig(current_key, r, 0, 0, "REQU", msg, i+offset)
+        temp = message.add_sig(current_key, _id, 0, 0, "REQU", msg, i+offset)
         size = temp.ByteSize()
         if i == 0:
             print("inner message:", len(msg))
@@ -63,7 +72,8 @@ def gen_requests(max_requests, batch_size, f):
         print(s, end='')
         backspace(len(s))
         # time.sleep(0.02)
-
+    # see the counter
+    print("keys_to_seq_tracker: ", keys_to_seq_tracker)
 
 if __name__ == '__main__':
     max_requests = config_yaml["testbed_config"]["requests"]["max"]

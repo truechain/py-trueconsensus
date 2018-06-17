@@ -2,12 +2,12 @@
 # name: pbft base configuration
 testbed_config:
   total: 5 # excluding base client
-  client_id: 5 # total-1 => 0-indexed
-  server_id_init: 4 # => 0 indexed
+  client_id: 5 # total-1 => 0-indexed # TODO -> add threaded multi client request support, and check for id->seq consistency 
+  server_id_init: 4 # N => 0 indexed
   threading_enabled: true
   requests:
-    max: 256
-    batch_size: 32
+    max: 12
+    batch_size: 4
 general:
   max_fail: 1
   base_port: 49500

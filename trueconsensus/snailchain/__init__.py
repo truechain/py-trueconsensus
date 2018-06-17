@@ -2,4 +2,4 @@
 Package import structure
 '''
 
-from snailchain.fpow import SnailChain
+from trueconsensus.snailchain.fpow import SnailChain

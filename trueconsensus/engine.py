@@ -21,29 +21,22 @@ import signal
 from datetime import datetime
 import socket
 # from random import random
-from argparse import RawTextHelpFormatter, \
-                ArgumentParser
-
 from threading import Timer, Thread
 
-from fastchain import node
-from fastchain.config import config_yaml, \
-    threading_enabled, \
+from trueconsensus.fastchain import node
+from trueconsensus.fastchain.config import config_yaml, \
+    THREADING_ENABLED, \
     _logger, \
     N, \
     RL
 
-from snailchain import SnailChain
-from fastchain.bft_committee import NodeBFT, \
-    ViewChangeInit, \
+from trueconsensus.snailchain import SnailChain
+from trueconsensus.fastchain.bft_committee import NodeBFT, \
     LedgerLog, \
     BFTcommittee
 
-from fastchain.subprotocol import SubProtoDailyBFT, \
+from trueconsensus.fastchain.subprotocol import SubProtoDailyBFT, \
     Mempools
-
-parser = ArgumentParser(formatter_class=RawTextHelpFormatter,
-                        description="""PBFT standalone server demo""")
 
 
 def suicide():
@@ -78,8 +71,9 @@ def init_server(id):
     s.bind((host, port))  # on EC2 we cannot directly bind on public addr
     s.listen(50)
     s.setblocking(0)
-    _logger.debug("Server [%s] -- listening on port %s" % (id, port))
-    _logger.debug("IP: %s" % ip)
+    msg = "Server [%s] IP [%s] -- listening on port %s" % (id, ip, port)
+    print(msg)
+    _logger.debug(msg)
     return s
 
 
@@ -147,26 +141,15 @@ class NonThreadedExecution(object):
         n.server_loop()
 
 
-# def pbft_usage():
-#     parser.add_argument("-n", "--nodes", dest="node_count", action='store',
-#                         help="# of PBFT nodes to be launched")
-#     parser.add_argument("-id", "--node-id", dest="node_id",
-#                         action='store_true',
-#                         help="")
-#     parser.add_argument("-ts", "--tune-settings", dest="tune",
-#                         action='store_true',
-#                         help="")
-
-
 def main():
     print("Start time: ", datetime.now())
-    print("Threading enabled: ", threading_enabled)
+    print("Threading enabled: ", THREADING_ENABLED)
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
     # import pdb; pdb.set_trace()
-    if threading_enabled:
+    if THREADING_ENABLED:
         ThreadedExecution().launch()
     else:
         NonThreadedExecution().launch()
