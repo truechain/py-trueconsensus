@@ -7,23 +7,23 @@ from trueconsensus.fastchain import ecdsa_sig as sig
 from trueconsensus.fastchain.config import _logger
 
 
-def add_sig(key, id, seq, view, type, message, timestamp=None):
+def add_sig(key, _id, seq, view, req_type, message, timestamp=None):
     """
     @key
-    @id
+    @_id
     @seq
     @view
-    @type
+    @req_type
     @message
     @timestamp
     """
     #key = sig.get_signing_key(id)
     req = request_pb2.Request()
     inner = req.inner
-    inner.id = id
+    inner.id = _id
     inner.seq = seq
     inner.view = view
-    inner.type = type
+    inner.type = req_type
     inner.msg = message
     if timestamp:
         inner.timestamp = timestamp

@@ -118,6 +118,7 @@ while len(m) > 0:
             # s.connect((ip,port))
             chunk = m[:size+4]
             client_logger.info("sending chunk of length %s over to replica set" % len(chunk))
+            # import pdb; pdb.set_trace()
             r.send(chunk)
             del chunk
             # s.send(m[:size+4])

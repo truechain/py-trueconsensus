@@ -3,42 +3,57 @@ from trueconsensus.fastchain.config import config_general
 
 
 class bank:
-    def __init__(self,id,number):
+    def __init__(self, _id, number):
         self.accounts = {}
         self.number = number
-        self.id = id
+        self.id = _id
         self.total_tx = 0
         self.transaction_history = {}
         for i in range(number):
             self.accounts[i] = 100
     # for now assume message is:
-    # [type][ammount][dest]
+    # [_type][ammount][dest]
     #   4       4      4
     # all in ascii because faster to code
-    # TODO: make this its own protobuff type
-    def process_request(self,key,id,seq,req):
+    # TODO: make this its own protobuff _type
+    def process_request(self, key, _id, seq, req):
         self.transaction_history[seq] = req
         self.total_tx += 1
         #print "EXECUTED TX #", self.total_tx
         msg = req.inner.msg
         src = req.inner.id
-        type = msg[:4]
-        if type != "TRAN":
-            m = message.add_sig(key, id, seq, req.inner.view, "RESP", "INVALID", req.inner.timestamp)
+        _type = msg[:4]
+        if _type != "TRAN":
+            m = message.add_sig(key, _id, seq, req.inner.view, "RESP", "INVALID", req.inner.timestamp)
             return m
 
         ammount = int(msg[4:8])
         dest = int(msg[8:12])
 
-        if type == "TRAN":
+        if _type == "TRAN":
             if ammount > self.accounts[src]:
-                m = message.add_sig(key, id, seq, req.inner.view, "RESP", "INVALID", req.inner.timestamp)
+                m = message.add_sig(
+                    key, 
+                    _id, 
+                    seq, 
+                    req.inner.view, 
+                    "RESP", 
+                    bytes("INVALID", encoding="utf-8"), 
+                    req.inner.timestamp
+                )
                 #print "transfer request invalid"
                 return m
             else:
                 self.accounts[src] = self.accounts[src] - ammount
                 self.accounts[dest] = self.accounts[dest] + ammount
-                m = message.add_sig(key, id, seq, req.inner.view, "RESP", "APPROVED", req.inner.timestamp)
+                m = message.add_sig(
+                    key, 
+                    id, 
+                    seq, 
+                    req.inner.view, 
+                    "RESP",bytes("APPROVED", encoding="utf-8"), 
+                    req.inner.timestamp
+                )
                 #print "transfer request approved"
                 return m
 
