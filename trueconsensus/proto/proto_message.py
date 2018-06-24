@@ -2,9 +2,21 @@ from Crypto.Hash import SHA256
 import struct
 
 # import sig
-from trueconsensus.proto import request_pb2
+from trueconsensus.proto import request_pb2, request_pb2_grpc
 from trueconsensus.fastchain import ecdsa_sig as sig
 from trueconsensus.fastchain.config import _logger
+
+def gen_txn(nonce, price, gas_limit, _to, fee, asset_bytes):
+    """
+    """
+    txn = request_pb2.TxnData()
+    txn.data.AccountNonce = nonce
+    txn.data.Price = price
+    txn.data.GasLimit = gas_limit
+    txn.data.Recipient = _to
+    txn.data.Amount = fee
+    txn.data.Payload = asset_bytes
+    return txn
 
 
 def add_sig(key, _id, seq, view, req_type, message, timestamp=None):
@@ -24,7 +36,7 @@ def add_sig(key, _id, seq, view, req_type, message, timestamp=None):
     inner.seq = seq
     inner.view = view
     inner.type = req_type
-    inner.msg = message
+    # block = inner.block
     if timestamp:
         inner.timestamp = timestamp
     #req.inner = inner
@@ -32,9 +44,10 @@ def add_sig(key, _id, seq, view, req_type, message, timestamp=None):
     h = SHA256.new()
     h.update(b)
     digest = h.digest()
+    # import pdb; pdb.set_trace()
     s = sig.sign_proto_key(key, digest)
+    msg_sig = req.sig
     req.dig = digest
-    req.sig = s
     return req
 
 def check(key, req):
@@ -78,3 +91,41 @@ def check(key, req):
         return None
 
 '''
+
+
+def send_ack(_id):
+    # TODO: verifications/checks
+    return 200
+
+
+class FastChainServicer(request_pb2_grpc.FastChainServicer):
+    # send_ack is exposed here
+    def Send(self, request, context):
+        response = request_pb2.GenericResp()
+        response.msg = request.inner.type
+        response.status = send_ack(request.inner.id)
+        # TODO: add request to node's outbuffmap and log this request
+        return response
+    
+    def Check(self, request, context):
+        response = request_pb2.GenericResp()
+        response.msg = request.inner.type
+        response.status = send_ack(request.inner.id)
+        # TODO: add request to node's log
+        return response
+
+    def NewTxnRequest(self, request, context):
+        # response = request_pb2.Transaction()
+        # data = response.data
+        # data.AccountNonce = request.data.AccountNonce
+        # data.Price = request.data.Price
+        # data.GasLimit = request.data.GasLimit
+        # data.Recipient = request.data.Recipient
+        # data.Amount = request.data.Amount
+        # data.Payload = request.data.Payload
+
+        response = request_pb2.GenericResp()
+        response.msg = "received transaction"
+        response.status = 200
+        # TODO: Add txn to node's txnpool
+        return response

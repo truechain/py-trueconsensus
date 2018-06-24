@@ -1,31 +1,22 @@
 import os
 import sys
 import time
-# import errno
-import socks
+import grpc
 import struct
-import socket
-import select
-# import signal
-# import logging
-# import traceback
-# import threading
-# from Crypto.Hash import SHA256
 from threading import Timer, Thread, Lock, Condition
 
-# import sig
 from trueconsensus.dapps import bank
 from trueconsensus.fastchain.ecdsa_sig import get_asymm_key
 from trueconsensus.proto import request_pb2, \
+    request_pb2_grpc, \
     proto_message as message
+
 from trueconsensus.fastchain.config import config_general, \
     RL, \
     CLIENT_ADDRESS, \
     _logger
 
 BUF_SIZE = 4096 * 8 * 8
-recv_mask = select.EPOLLIN | select.EPOLLPRI | select.EPOLLRDNORM
-send_mask = select.EPOLLOUT | select.EPOLLWRNORM
 
 lock = Lock()
 cond = Condition(lock)
@@ -39,7 +30,6 @@ class exec_thread(Thread):
 
     def run(self):
         self.node.execute(self.req)
-        # print(self.req.inner.seq)
         return
 
 
@@ -89,9 +79,6 @@ class Node(object):
         self.max_requests = max_requests
         self.kill_flag = False
         # self.ecdsa_key = ecdsa_sig.get_asymm_key(0, "verify")
-        # f = open("hello_0.dat", 'r')
-        # self.hello_sig = f.read()
-        # f.close()
         self.connections = 0
         self._id = _id             # id
         self.view = view         # current view number
@@ -118,7 +105,6 @@ class Node(object):
         self.fdmap = {}    # file descriptor to socket mapping
         self.buffmap = {}  # file descriptor to incomming (recv) buffer mapping
         self.outbuffmap = {}
-        self.p = select.epoll()                 # epoll object
         # message log for node communication related to the
         # PBFT protocol: [type][seq][id] -> request
         self.node_message_log = {
@@ -174,18 +160,6 @@ class Node(object):
         _logger.info("Node: [%s], Wait Queue Length: [%s]" % (self._id, len(self.waiting)))
         _logger.info("Node: [%s], Last Executed: [%s]" % (self._id, self.last_executed))
         self.bank.print_balances()
-        # m = self.create_request("REQU", 0, "replica " + str(self._id) + " going down", 0)
-        # self.broadcast_to_nodes(m)
-        # for i,s in self.replica_map.items():
-        #    try:
-        #        s.send(serialize(m))
-        #        print("sent to ", i)
-        #        print("-------------")
-        #    except:
-        #        print("could not send to ", i)
-        #        #print(traceback.format_exc())
-        #        print("-------------")
-        # sys.exit()
 
     def reset_message_log(self):
         # message log for node communication related to the PBFT protocol:
@@ -203,21 +177,26 @@ class Node(object):
         self.prep_dict = {}
         self.comm_dict = {}
 
-    # TODO: include a failed send buffer per socket, retry later
-    def safe_send(self, s, req):
+    # TODO: include a failed send buffer, retry later
+    def safe_send(self, _id, channel, req, test_connection=False):
         try:
-            self.outbuffmap[s.fileno()] += serialize(req)#.decode('latin-1')
-            self.p.modify(s.fileno(), send_mask)
-        except socket.error as serr:
-            print(serr)
-            return
-        #try:
-        #    s.send(serialize(req))
-        #except socket.error, serr:
-        #    print(serr)
-        #    #raise
-        #    if serr.errno == errno.ECONNRESET or errno.EPIPE or errno.ENOTCONN:
-        #        return
+            stub = request_pb2_grpc.FastChainStub(channel)
+            if test_connection:
+                success = False
+                count = 0
+                while (not success) and (count <= self.max_requests):
+                    # make the call and exit while loop, since this was just an INIT request
+                    response = stub.Check(req)
+                    assert response.msg == '200'
+                    # leave it to server_loop to send requests from buffer
+                    # else:
+                    #     response = stub.Send(req)
+                    success = True
+        except:
+            _logger.error("gRPC channel for Node [%s] is not active. Retrying.." % _id)
+        if success:
+            self.outbuffmap[_id] += serialize(req)#.decode('latin-1')
+
 
     def broadcast_to_nodes(self, req):
         counter = 0
@@ -231,13 +210,9 @@ class Node(object):
                                                    str(counter))
         record(self.debuglog, msg)
 
-    def init_replica_map(self, socket_obj):
-        self.fdmap[socket_obj.fileno()] = socket_obj
-        self.p.register(socket_obj, recv_mask)
-        self.replica_map[self._id] = socket_obj
-        #self.replica_map = {}
-        #for i in range(self._id+1, self.N)[::-1]:
-        
+    def init_replica_map(self, grpc_obj):
+        self.fdmap[self._id] = grpc_obj
+        self.replica_map[self._id] = grpc_obj
         # TODO: 
         # make this dynamic / event responsibe upon request of addition of new node (from BFT committee)
         # Also, this should trigger check margin for valid minimum number of nodes to be present 
@@ -245,49 +220,17 @@ class Node(object):
         for i in range(self.N):
             if i == self._id:
                 continue
-            # r = socket.socket()
-            # import pdb; pdb.set_trace()
             remote_ip, remote_port = RL[i]
-            _logger.debug("Node: [%s], Msg: [Attempt Connection], Replica List => %s" % (self._id, RL))
-            retry = True
-            # retry = False
-            count = 0
-            while retry:  # re-trying will not cause a deadlock.
-                count += 1
-                try:
-                    r = socks.socksocket()
-                    # import pdb; pdb.set_trace()
-                    # r.setproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", config.TOR_SOCKSPORT[self._id], True)
-                    # r.setblocking(0)
-                    r.connect((remote_ip, remote_port))
-                    _logger.info("Node: [%s], Msg: [Connection Established], Target: [%s:%s]" % (self._id, remote_ip, remote_port))
-                except Exception as e:
-                    time.sleep(0.5)
-                    r.close()
-                    _logger.debug("Node: [%s], Msg: [Connection Retry], Count: [%s], Target: [%s:%d], Cause => {%s}" %
-                          (self._id, count, remote_ip, remote_port, str(e)))
-                    #if count == 10000:
-                     #   raise
-                    continue
-                retry = False
-           #r.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
-            self.replica_map[i] = r
-            self.fdmap[r.fileno()] = r
-            self.buffmap[r.fileno()] = bytes()
-            self.outbuffmap[r.fileno()] = bytes()
-            self.p.register(r, recv_mask)
-            #m = message.add_sig(K, "INIT " + str(ID), ID)
-            #m = add_sig(0,"INIT",str(ID))
-            #r.send(m.SerializeToString())
+            channel = grpc.insecure_channel('%s:%s' % (remote_ip, remote_port))
+            self.replica_map[i] = channel
+            self.fdmap[i] = channel
+            self.buffmap[i] = bytes()
+            self.outbuffmap[i] = bytes()
             m = self.create_request("INIT", 0, str(self._id).encode("utf-8"))
-            self.safe_send(r, m)
-            msg = "init connection to replica " + str(i) + " on fd " + str(r.fileno())
-            _logger.info("Node: [%s], Phase: [INIT], Msg: [Connected to Replica %d], Event FD: [%s]" % (self._id, i, str(r.fileno())))
+            self.safe_send(i, channel, m, test_connection=True)
+            msg = "init connection to replica %d" % i
+            _logger.info("Node: [%s], Phase: [INIT], Msg: [Connected to Replica %d]" % (self._id, i))
 
-    # def init_keys(self, number):
-    #     for i in range(number):
-    #         key = sig.get_signing_key(i)
-    #         self.key_dict[i] = key
 
     # type, seq, message, (optional) tag request
     def create_request(self, req_type, seq, msg, outer_req=None):
@@ -982,102 +925,102 @@ class Node(object):
                 req.inner.type,
                 req.inner.id))
 
-    def server_loop(self):
-        """
-        call flow graph:
+    # def server_loop(self):
+    #     """
+    #     call flow graph:
 
-        -> server_loop() -> parse_request() ->
-        self.request_types[req.inner.type]() -> [] process_client_request() ->
-        execute_in_order() -> execute() ->
-            - self.bank.process_request()
-            - client_sock.send()
-            - record()
-        -> suicide() when Max Requests reached..
-        """
-        # counter = 0
+    #     -> server_loop() -> parse_request() ->
+    #     self.request_types[req.inner.type]() -> [] process_client_request() ->
+    #     execute_in_order() -> execute() ->
+    #         - self.bank.process_request()
+    #         - client_sock.send()
+    #         - record()
+    #     -> suicide() when Max Requests reached..
+    #     """
+    #     # counter = 0
 
-        # self.fdmap[s.fileno] = s
-        # self.p.register(s, recv_mask)
-        s = self.replica_map[self._id]
-        _logger.info("Node: [%s], Current Primary: [%s]" % (self._id, self.primary))
-        _logger.info("Node: [%s], Msg: [INIT SERVER LOOP]" % (self._id))
-        t = Timer(5, self.try_client)
-        t.start()
-        while True:
-            #print(counter)
-            events = self.p.poll()
-            _logger.debug("Node: [%s], Msg: [Polling Queue], Events => {%s}" % (self._id, events))
-            #cstart = time.time()
+    #     # self.fdmap[s.fileno] = s
+    #     # self.p.register(s, recv_mask)
+    #     s = self.replica_map[self._id]
+    #     _logger.info("Node: [%s], Current Primary: [%s]" % (self._id, self.primary))
+    #     _logger.info("Node: [%s], Msg: [INIT SERVER LOOP]" % (self._id))
+    #     t = Timer(5, self.try_client)
+    #     t.start()
+    #     while True:
+    #         #print(counter)
+    #         events = self.p.poll()
+    #         _logger.debug("Node: [%s], Msg: [Polling Queue], Events => {%s}" % (self._id, events))
+    #         #cstart = time.time()
 
-            # import pdb; pdb.set_trace()
-            for fd, event in events:
-                # counter += 1
-                # need the flag for "Service temporarilly unavailable" exception
-                data = None
-                recv_flag = False
-                if fd is s.fileno():
-                    c, addr = s.accept()
-                    _logger.debug("Node: [%s], Msg: [Got Connection], Address => {%s}" % (self._id, addr))
-                    #print("Got connection from " + str(addr))
-                    c.setblocking(0)
-                    #c.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
-                    self.p.register(c, recv_mask)
-                    self.fdmap[c.fileno()] = c
-                    self.buffmap[c.fileno()] = bytes()
-                    self.outbuffmap[c.fileno()] = bytes()
-                    self.connections += 1
-                else:
-                    # if we have a write event
-                    if event & send_mask != 0:
-                        if len(self.outbuffmap[fd]) > 0:
-                            try:
-                                rc = self.fdmap[fd].send(self.outbuffmap[fd])
-                                self.outbuffmap[fd] = self.outbuffmap[fd][rc:]
-                                if len(self.outbuffmap[fd]) == 0:
-                                    self.p.modify(fd, recv_mask)
-                            except:
-                                #raise
-                                self.clean(fd)
-                            continue
+    #         # import pdb; pdb.set_trace()
+    #         for fd, event in events:
+    #             # counter += 1
+    #             # need the flag for "Service temporarilly unavailable" exception
+    #             data = None
+    #             recv_flag = False
+    #             if fd is s.fileno():
+    #                 c, addr = s.accept()
+    #                 _logger.debug("Node: [%s], Msg: [Got Connection], Address => {%s}" % (self._id, addr))
+    #                 #print("Got connection from " + str(addr))
+    #                 c.setblocking(0)
+    #                 #c.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
+    #                 self.p.register(c, recv_mask)
+    #                 self.fdmap[c.fileno()] = c
+    #                 self.buffmap[c.fileno()] = bytes()
+    #                 self.outbuffmap[c.fileno()] = bytes()
+    #                 self.connections += 1
+    #             else:
+    #                 # if we have a write event
+    #                 if event & send_mask != 0:
+    #                     if len(self.outbuffmap[fd]) > 0:
+    #                         try:
+    #                             rc = self.fdmap[fd].send(self.outbuffmap[fd])
+    #                             self.outbuffmap[fd] = self.outbuffmap[fd][rc:]
+    #                             if len(self.outbuffmap[fd]) == 0:
+    #                                 self.p.modify(fd, recv_mask)
+    #                         except:
+    #                             #raise
+    #                             self.clean(fd)
+    #                         continue
 
-                    if event & recv_mask != 0:
-                        try:
-                            data = self.fdmap[fd].recv(BUF_SIZE)
-                            recv_flag = True
-                        except Exception as E:
-                            _logger.error("Node: [%s], Msg: [%s]" % (self._id, E))
-                            self.clean(fd)
-                            continue
-                        #except socket.error, serr:
-                        #print("exception...")
-                        #print(serr)
-                        #self.clean(fd)
-                    if not data and recv_flag:
-                        try:
-                            peer_address = ":".join(str(i) for i in self.fdmap[fd].getpeername())
-                            _logger.debug("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], Address: [%s]" % (self._id, fd, peer_address))
-                        except Exception as E:
-                            _logger.error("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], ErrorMsg => {%s}" % (self._id, fd, E))
-                        self.clean(fd)
-                    elif recv_flag:
-                        _logger.debug("Node: [%s], ChunkLength: [%s]" % (self._id, len(data)))  # .decode('latin-1')))
-                        self.buffmap[fd] += data  # .decode('latin-1')
-                        while(len(self.buffmap[fd]) > 3):
-                            try:
-                                size = struct.unpack("!I", self.buffmap[fd][:4])[0]
-                            except Exception as E:
-                                _logger.error("Node: [%s], ErrorMsg => [%s]" % (self._id, E))
-                                break
-                                # import pdb; pdb.set_trace()
+    #                 if event & recv_mask != 0:
+    #                     try:
+    #                         data = self.fdmap[fd].recv(BUF_SIZE)
+    #                         recv_flag = True
+    #                     except Exception as E:
+    #                         _logger.error("Node: [%s], Msg: [%s]" % (self._id, E))
+    #                         self.clean(fd)
+    #                         continue
+    #                     #except socket.error, serr:
+    #                     #print("exception...")
+    #                     #print(serr)
+    #                     #self.clean(fd)
+    #                 if not data and recv_flag:
+    #                     try:
+    #                         peer_address = ":".join(str(i) for i in self.fdmap[fd].getpeername())
+    #                         _logger.debug("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], Address: [%s]" % (self._id, fd, peer_address))
+    #                     except Exception as E:
+    #                         _logger.error("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], ErrorMsg => {%s}" % (self._id, fd, E))
+    #                     self.clean(fd)
+    #                 elif recv_flag:
+    #                     _logger.debug("Node: [%s], ChunkLength: [%s]" % (self._id, len(data)))  # .decode('latin-1')))
+    #                     self.buffmap[fd] += data  # .decode('latin-1')
+    #                     while(len(self.buffmap[fd]) > 3):
+    #                         try:
+    #                             size = struct.unpack("!I", self.buffmap[fd][:4])[0]
+    #                         except Exception as E:
+    #                             _logger.error("Node: [%s], ErrorMsg => [%s]" % (self._id, E))
+    #                             break
+    #                             # import pdb; pdb.set_trace()
 
-                            if len(self.buffmap[fd]) >= size+4:
-                                self.parse_request(self.buffmap[fd][4:size+4], fd)
-                                if fd not in self.buffmap:
-                                    break
-                                self.buffmap[fd] = self.buffmap[fd][size+4:]
-                            else:
-                                # TODO: check if remaining buffmap of slice
-                                # less than size+4 as leftover crumbs
-                                break
-            if self.kill_flag:
-                sys.exit()
+    #                         if len(self.buffmap[fd]) >= size+4:
+    #                             self.parse_request(self.buffmap[fd][4:size+4], fd)
+    #                             if fd not in self.buffmap:
+    #                                 break
+    #                             self.buffmap[fd] = self.buffmap[fd][size+4:]
+    #                         else:
+    #                             # TODO: check if remaining buffmap of slice
+    #                             # less than size+4 as leftover crumbs
+    #                             break
+    #         if self.kill_flag:
+    #             sys.exit()

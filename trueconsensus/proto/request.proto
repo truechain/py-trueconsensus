@@ -1,6 +1,34 @@
 syntax = "proto3";
 
-package request;
+package fastchain;
+
+
+//Interface exposed by pbft committee nodes
+service FastChain {
+    //Send new transaction to presumed leader node
+    rpc NewTxnRequest (Transaction) returns (GenericResp) {}
+    // rpc BroadcastByGRPC (Request) returns (GenericResp) {}
+    rpc Check (Request) returns (GenericResp) {}
+    rpc Send (Request) returns (GenericResp) {}
+}
+
+// //Interface exposed by client
+// service Client {
+//         //RPC service that responds whether the node is the leader
+//         // rpc CheckLeader (CheckLeaderReq) returns (CheckLeaderResp) {}
+        
+//         //Send new transaction to presumed leader node
+//         rpc NewTxnRequest (Transaction) returns (GenericResp) {}
+// }
+
+service ClientReceiver {
+    //RPC service that responds whether the node is the leader
+    // rpc CheckLeader (CheckLeaderReq) returns (CheckLeaderResp) {}
+    
+    //Send new transaction to presumed leader node
+    rpc PbftReplyReceiver (PbftBlock) returns (GenericResp) {}
+}
+
 
 message Request {
     message Inner {
@@ -8,16 +36,82 @@ message Request {
         int32 seq = 2;
         int32 view = 3;
         string type = 4;
-        bytes msg = 5;
+        PbftBlock block = 5;
         int32 timestamp = 6;
     }
 
+    // message MsgSignature {
+    //         bytes r = 1;
+    //         bytes s = 2;
+    // }
+
     Inner inner = 1;
     bytes dig = 2;
+    // MsgSignature sig = 3;
     bytes sig = 3;
     bytes outer = 4;
 }
 
 message History {
     repeated Request req = 1;
+}
+
+message CheckLeaderReq {}
+message CheckLeaderResp {
+        bool message = 1;
+}
+
+message Nodes {
+    repeated TruePbftNode nodes = 1;
+}
+
+message TxnData {
+    uint64 AccountNonce       	 = 1; // Nonce
+    int64  Price 	     	 = 2; // Gas Price
+    int64  GasLimit		 = 3; // start gas?? 
+    bytes  Recipient		 = 4; // to
+    int64  Amount 		 = 5; // value
+    bytes  Payload		 = 6; // data
+    
+    int64  V 			 = 7;
+    int64  R			 = 8;
+    int64  S			 = 9;
+
+    bytes Hash			 = 10; // ?? 
+}
+message Transaction {
+    TxnData data 		 = 1;
+}
+
+message Transactions {
+    repeated Transaction txns = 1;
+}
+
+message PbftBlockHeader {
+    int64  Number 	= 1;
+    int64  GasLimit     = 2;
+    int64  GasUsed	= 3;
+    int64  Time		= 4;
+}
+
+message PbftBlock {
+    PbftBlockHeader   header    = 1;
+    Transactions      txns      = 2;
+    repeated string   signs     = 3;   
+}
+
+message TruePbftNode {
+    string addr	     = 1;
+    string pubkey    = 2;
+    string privkey   = 3;
+}
+
+message TrueChain {
+    repeated PbftBlock blocks   = 1;
+    PbftBlockHeader  lastHeader = 2;
+}
+
+message GenericResp {
+    string msg = 1;
+    int32  status = 2;
 }

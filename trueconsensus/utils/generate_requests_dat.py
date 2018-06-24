@@ -5,7 +5,9 @@ import sys
 import socket
 import random
 import struct
+import sqlite3
 from collections import defaultdict
+
 
 # import sig
 from trueconsensus.fastchain import ecdsa_sig

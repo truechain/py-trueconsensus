@@ -18,12 +18,15 @@ import os
 import sys
 # import yaml
 import signal
+import grpc
 import struct
-import select
+# import select
 from datetime import datetime
 import socket
 # from random import random
 from threading import Timer, active_count
+
+from concurrent import futures
 
 from trueconsensus.fastchain import node
 from trueconsensus.fastchain.config import config_yaml, \
@@ -45,8 +48,8 @@ from trueconsensus.utils.interruptable_thread import InterruptableThread
 
 
 BUF_SIZE = 4096 * 8 * 8
-recv_mask = select.EPOLLIN | select.EPOLLPRI | select.EPOLLRDNORM
-send_mask = select.EPOLLOUT | select.EPOLLWRNORM
+# recv_mask = select.EPOLLIN | select.EPOLLPRI | select.EPOLLRDNORM
+# send_mask = select.EPOLLOUT | select.EPOLLWRNORM
 
 # class GracefulExit(object):
 #     def __enter__(self):
@@ -79,23 +82,20 @@ def signal_handler(event, frame):
         sys.exit(130)  # Ctrl-C for bash
 
 
-def init_server(id):
+def init_grpc_server(_id):
     global RL
     try:
-        ip, port = RL[id]
+        ip, port = RL[_id]
     except IndexError as E:
         quit("%s Ran out of replica list. No more server config to try" % E)
-    s = socket.socket()
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # host = socket.gethostname()
-    host = "0.0.0.0"
-    s.bind((host, port))  # on EC2 we cannot directly bind on public addr
-    s.listen(50)
-    s.setblocking(0)
-    msg = "Server [%s] IP [%s] -- listening on port %s" % (id, ip, port)
+    
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server.add_insecure_port('%s:%s' % (ip, port))
+    server.start()
+    msg = "Node: [%s], Msg: [Starting gRPC server], Address: [%s:%s]" % (_id, ip, port)
     print(msg)
     _logger.debug(msg)
-    return s
+    return server
 
             
 class ThreadedExecution(InterruptableThread):
@@ -105,6 +105,7 @@ class ThreadedExecution(InterruptableThread):
     def __init__(self, _id):
         self._id = _id
         self.countdown = 3 # time taken before node stops itself
+        self.grpc_obj = init_grpc_server(self._id)
         InterruptableThread.__init__(self)
 
 
@@ -140,101 +141,80 @@ class ThreadedExecution(InterruptableThread):
         sys.stdout.write("run started\n")
         sys.stdout.flush()
 
-        socket_obj = init_server(self._id)
         n = node.Node(
             self._id, 
             0, 
             N, 
             max_requests=config_yaml['testbed_config']['requests']['max']
         )
-
-        n.init_replica_map(socket_obj)
-
-        # counter = 0
-        # self.fdmap[s.fileno] = s
-        # self.p.register(s, recv_mask)
+        n.init_replica_map(self.grpc_obj)
+        # grpc instance
         s = n.replica_map[n._id]
-
         _logger.info("Node: [%s], Current Primary: [%s]" % (n._id, n.primary))
         _logger.info("Node: [%s], Msg: [INIT SERVER LOOP]" % (n._id))
-        
-
         t = Timer(5, n.try_client)
         t.start()
 
         while not self.is_stop_requested():
-            events = n.p.poll()
-            _logger.debug("Node: [%s], Msg: [Polling Queue], Events => {%s}" % (n._id, events))
-            for fd, event in events:
-                # counter += 1
-                # need the flag for "Service temporarilly unavailable" exception
-                data = None
-                recv_flag = False
-                if fd is s.fileno():
-                    c, addr = s.accept()
-                    _logger.debug("Node: [%s], Msg: [Got Connection], Address => {%s}" % (n._id, addr))
-                    #print("Got connection from " + str(addr))
-                    c.setblocking(0)
-                    #c.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
-                    n.p.register(c, recv_mask)
-                    n.fdmap[c.fileno()] = c
-                    n.buffmap[c.fileno()] = bytes()
-                    n.outbuffmap[c.fileno()] = bytes()
-                    n.connections += 1
-                else:
-                    # if we have a write event
-                    if event & send_mask != 0:
-                        if len(n.outbuffmap[fd]) > 0:
-                            try:
-                                rc = n.fdmap[fd].send(n.outbuffmap[fd])
-                                n.outbuffmap[fd] = n.outbuffmap[fd][rc:]
-                                if len(n.outbuffmap[fd]) == 0:
-                                    n.p.modify(fd, recv_mask)
-                            except:
-                                #raise
-                                n.clean(fd)
-                            continue
-
-                    if event & recv_mask != 0:
+            data = None
+            recv_flag = False
+            if fd is s.fileno():
+                _logger.debug("Node: [%s], Msg: [Got Connection], Address => {%s}" % (n._id, addr))
+                n.buffmap[c.fileno()] = bytes()
+                n.outbuffmap[c.fileno()] = bytes()
+                n.connections += 1
+            else:
+                # if we have a write event
+                if event & send_mask != 0:
+                    if len(n.outbuffmap[fd]) > 0:
                         try:
-                            data = n.fdmap[fd].recv(BUF_SIZE)
-                            recv_flag = True
-                        except Exception as E:
-                            _logger.error("Node: [%s], Msg: [%s]" % (n._id, E))
+                            rc = n.fdmap[fd].send(n.outbuffmap[fd])
+                            n.outbuffmap[fd] = n.outbuffmap[fd][rc:]
+                            if len(n.outbuffmap[fd]) == 0:
+                                n.p.modify(fd, recv_mask)
+                        except:
+                            #raise
                             n.clean(fd)
-                            continue
-                        #except socket.error, serr:
-                        #print("exception...")
-                        #print(serr)
-                        #self.clean(fd)
-                    if not data and recv_flag:
-                        try:
-                            peer_address = ":".join(str(i) for i in n.fdmap[fd].getpeername())
-                            _logger.debug("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], Address: [%s]" % (n._id, fd, peer_address))
-                        except Exception as E:
-                            _logger.error("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], ErrorMsg => {%s}" % (n._id, fd, E))
+                        continue
+
+                if event & recv_mask != 0:
+                    try:
+                        data = n.fdmap[fd].recv(BUF_SIZE)
+                        recv_flag = True
+                    except Exception as E:
+                        _logger.error("Node: [%s], Msg: [%s]" % (n._id, E))
                         n.clean(fd)
-                    elif recv_flag:
-                        _logger.debug("Node: [%s], ChunkLength: [%s]" % (n._id, len(data)))  # .decode('latin-1')))
-                        n.buffmap[fd] += data  # .decode('latin-1')
-                        while(len(n.buffmap[fd]) > 3):
-                            try:
-                                size = struct.unpack("!I", n.buffmap[fd][:4])[0]
-                            except Exception as E:
-                                _logger.error("Node: [%s], ErrorMsg => [%s]" % (n._id, E))
-                                break
-                                # import pdb; pdb.set_trace()
+                        continue
+                    #self.clean(fd)
+                if not data and recv_flag:
+                    try:
+                        peer_address = ":".join(str(i) for i in n.fdmap[fd].getpeername())
+                        _logger.debug("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], Address: [%s]" % (n._id, fd, peer_address))
+                    except Exception as E:
+                        _logger.error("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], ErrorMsg => {%s}" % (n._id, fd, E))
+                    n.clean(fd)
+                elif recv_flag:
+                    _logger.debug("Node: [%s], ChunkLength: [%s]" % (n._id, len(data)))  # .decode('latin-1')))
+                    n.buffmap[fd] += data  # .decode('latin-1')
+                    while(len(n.buffmap[fd]) > 3):
+                        try:
+                            size = struct.unpack("!I", n.buffmap[fd][:4])[0]
+                        except Exception as E:
+                            _logger.error("Node: [%s], ErrorMsg => [%s]" % (n._id, E))
+                            break
+                            # import pdb; pdb.set_trace()
 
-                            if len(n.buffmap[fd]) >= size+4:
-                                n.parse_request(n.buffmap[fd][4:size+4], fd)
-                                if fd not in n.buffmap:
-                                    break
-                                n.buffmap[fd] = n.buffmap[fd][size+4:]
-                            else:
-                                # TODO: check if remaining buffmap of slice
-                                # less than size+4 as leftover crumbs
+                        if len(n.buffmap[fd]) >= size+4:
+                            n.parse_request(n.buffmap[fd][4:size+4], fd)
+                            if fd not in n.buffmap:
                                 break
+                            n.buffmap[fd] = n.buffmap[fd][size+4:]
+                        else:
+                            # TODO: check if remaining buffmap of slice
+                            # less than size+4 as leftover crumbs
+                            break
 
+        self.grpc_obj.stop(0)
         # n.debug_print_bank()
         sys.stdout.write("run exited\n")
         sys.stdout.flush()

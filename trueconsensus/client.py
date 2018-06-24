@@ -1,6 +1,5 @@
 #!/bin/env python
 
-# import proto_message as message
 import socket
 import os
 import sys
@@ -11,7 +10,9 @@ import time
 import socks
 # import time
 
-from trueconsensus.proto import request_pb2
+from trueconsensus.dapps import bank
+import proto_message as message
+from trueconsensus.proto import request_pb2, request_pb2_grpc
 from trueconsensus.fastchain.config import CLIENT_ADDRESS, \
     CLIENT_ID, \
     RL, \
@@ -27,13 +28,8 @@ def recv_response(n):
     global kill_flag
     count = 0
     print("RECEIVING")
-    s = socket.socket()
-    p = select.epoll()
-    ip, port = CLIENT_ADDRESS
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.setblocking(0)
-    s.bind(('0.0.0.0', port))
-    s.listen(50)
+    ClientReceiver
+
     client_logger.info("Client [%s] listening on port %s" % (CLIENT_ID, port))
     client_logger.info("Client IP: %s" % ip)
     p.register(s)
@@ -67,79 +63,54 @@ def recv_response(n):
             client_logger.debug('CLIENT [%s] total time spent with chain: %s' % (end_time - start_time))
             # f.close()
 
-if len(sys.argv) == 2:
-    n = int(sys.argv[1])
-else:
-    n = 50
 
-# id = 9
-# n = 0
-t = threading.Thread(target=recv_response, args=[n])
-t.daemon = True
-t.start()
-requests_loc = os.path.join(
-    config_general.get("node", "ledger_location"),
-    "reqs.dat"
-)
-m = open(requests_loc, "rb").read()
+def send_requests():
+    client_logger.info("Starting send for bufflen %s" % len(m))
+    bank.gen_accounts(len(RL))
+    start_time = time.time()
+    # for i in range(n):
+    RL_REQUEST_TRACKER = dict.fromkeys(["%s:%s" % (ip, port) for ip, port in RL], False)
+    while not all_done:
+        for ip, port in RL:
+            try:
+                # generate bank ids and add 1000 to every account
+                # bank = bank.bank(id, 1000)
+                # TODO: check if bi directional channel is needed
+                channel = grpc.insecure_channel("%s:%s" % (ip, port))
+                stub = request_pb2_grpc.Client(channel)
+                new_txn = request_pb2.NewTxnRequest()
+                new_txn.data = message.gen_txn(nonce, price, gas_limit, _to, fee, asset_bytes)
+                
+                # signify request being sent
+                RL_REQUEST_TRACKER["%s:%s" % (ip, port)] = True
+                if all(RL_REQUEST_TRACKER):
+                    all_done = True
 
-client_logger.info("Loaded Messages")
-client_logger.info("Starting send for bufflen %s" % len(m))
-sock_list = []
+            except Exception as e:  # broad catch
+                client_logger.error("Msg: [failed to send], Target: [%s:%s], Error => {%s}" % \
+                                    (ip, port, e))
+            
 
-# # import pdb; pdb.set_trace()
-# for i in range(len(m)//4):
-#     b = m[:4]
-#     try:
-#         # size is > 4 after unpacking the bytes
-#         size = struct.unpack("!I", b)[0]
-#     except struct.error:
-#         # import pdb; pdb.set_trace()
-#         break
-#     m = m[size+4:]
-#     # n += 1
-#     # print(i, size, len(m))
+        m = m[size+4:]
 
-start_time = time.time()
-# for i in range(n):
-while len(m) > 0:
-    b = m[:4]
-    try:
-        size = struct.unpack("!I", b)[0]
-    except struct.error:
-        pass
-    for ip, port in RL:
-        try:
-            #s = socket.socket()
-            r = socks.socksocket()
-            # r.setproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", TOR_SOCKSPORT[N], True)
-            ## r.setblocking(0)
-            r.connect((ip, port))
-            # s.connect((ip,port))
-            chunk = m[:size+4]
-            client_logger.info("sending chunk of length %s over to replica set" % len(chunk))
-            # import pdb; pdb.set_trace()
-            r.send(chunk)
-            del chunk
-            # s.send(m[:size+4])
-            # sock_list.append(s)
-            sock_list.append(r)
-            r.close()
-            # s.close()
-        except Exception as e:  # broad catch
-            client_logger.error("failed to send to [%s:%s] due to %s" % \
-                                (ip, port, e))
-            pass
-    #s2 = socket.socket()
-    #s2.connect(RL[0])
-    #s2.send(m[:size+4])
-    #s2.close()
-    m = m[size+4:]
-
-client_logger.info("Done sending... wait for receives")
-while True:
-    time.sleep(1)
-    if kill_flag:
-        # give laggy requests some time to show up
+    client_logger.info("Done sending... wait for receives")
+    while True:
         time.sleep(1)
-        sys.exit()
+        if kill_flag:
+            # give laggy requests some time to show up
+            time.sleep(1)
+            sys.exit()
+
+if __name__ == '__main__':
+    if len(sys.argv) == 2:
+        n = int(sys.argv[1])
+    else:
+        n = 50
+
+    # id = 9
+    # n = 0
+    t = threading.Thread(target=recv_response, args=[n])
+    t.daemon = True
+    t.start()
+
+    send_requests()

@@ -66,9 +66,26 @@ OR
 Then proceed as follows:
 
 ```
-# generate proto/requests_pb2.py from proto/requests.proto file
+# generate proto/requests_pb2* from proto/requests.proto file
 ./trueconsensus/utils/generate_proto.sh
+```
 
+To counter [this issue with protobuf py3](https://github.com/google/protobuf/issues/1491),
+edit the generated `request_pb2_grpc.py` and replace:
+
+```
+import request_pb2 as request__pb2
+```
+
+..with:
+
+```
+from . import request_pb2 as request__pb2
+```
+
+Then,
+
+```
 # generate asymm keypairs
 python -m trueconsensus.utils.make_keys
 

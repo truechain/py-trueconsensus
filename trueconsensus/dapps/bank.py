@@ -1,5 +1,10 @@
+# import sqlite3
+import pickle
+
 from trueconsensus.proto import proto_message as message
 from trueconsensus.fastchain.config import config_general
+from trueconsensus.fastchain.config import client_logger
+from datetime import datetime
 
 
 class bank:
@@ -74,3 +79,64 @@ class bank:
         for seq,req in self.transaction_history.iteritems():
             f.write(str(seq) + "\t" + req.inner.msg + "\n")
         f.close()
+
+
+def retrieve_ledger(node_id):
+    ledger_loc = os.path.join(
+        config_general.get('node', 'ledger_location'),
+        'ledger_for_node_%d.db' % node_id
+    )
+    return ledger_loc
+
+def open_db_conn(node_id):
+    try:
+        # conn = sqlite3.connect(bank_ledger_loc)
+        # c = conn.cursor()
+        db = open(retrieve_ledger(node_id), 'wb')
+        # db = pickledb.load(, False) 
+    except Exception as E:
+        import pdb; pdb.set_trace()
+
+    client_logger.debug("Opened Database connection..")
+    return db
+
+def load_db_data(node_id):
+    db = open(retrieve_ledger(node_id), 'rb')
+    data = pickle.load(db)
+    return data
+
+def close_db_conn(node_id, db):
+    try:
+        # db.commit()
+        # db.close()
+        db.close()
+        # write back to ledger
+    except Exception as E:
+        import pdb; pdb.set_trace()
+
+    client_logger.debug("Closed Database connection..")
+    return
+
+def write_to_db(data, db):
+    pickle.dump(data, db)
+
+def gen_accounts(n, c):
+    client_logger.debug("Generating %d accounts" % n)
+    try:
+        # c.execute('''CREATE TABLE customers
+        #             (date text, name text, fiat real)''')
+        for i in range(n):
+            # TODO: add to log ledger, the txn info 
+            # c.execute("INSERT INTO customers VALUES ('%s','%s', %d)" % (
+            #     datetime.now().strftime("%Y-%m-%d"), 
+            #     "cust_id_%d" % i,
+            #     random.randint(1, 1000)
+            # )
+            pass
+    except Exception as E:
+        import pdb; pdb.set_trace()
+
+    client_logger.debug("Generating %d accounts" % n)
+
+def query_acc(_id, c):
+    pass
