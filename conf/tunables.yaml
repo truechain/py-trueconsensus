@@ -5,6 +5,7 @@ testbed_config:
   client_id: 5 # total-1 => 0-indexed # TODO -> add threaded multi client request support, and check for id->seq consistency 
   server_id_init: 4 # N => 0 indexed
   threading_enabled: true
+  max_retries: 5
   requests:
     max: 12
     batch_size: 4

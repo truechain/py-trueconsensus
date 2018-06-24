@@ -1,18 +1,17 @@
 #!/bin/env python
 
-import socket
 import os
 import sys
 import struct
 import threading
 import select
 import time
-import socks
 # import time
 
 from trueconsensus.dapps import bank
-import proto_message as message
-from trueconsensus.proto import request_pb2, request_pb2_grpc
+from trueconsensus.proto import request_pb2, \
+    request_pb2_grpc, \
+    proto_message as message
 from trueconsensus.fastchain.config import CLIENT_ADDRESS, \
     CLIENT_ID, \
     RL, \
@@ -32,30 +31,24 @@ def recv_response(n):
 
     client_logger.info("Client [%s] listening on port %s" % (CLIENT_ID, port))
     client_logger.info("Client IP: %s" % ip)
-    p.register(s)
     # f = open("client_log.txt", 'w')
     client_msg = "[%s] SEQUENCE: 0 REPLICA: 0 START\n" % (time.time())
     # f.write(client_msg)
     client_logger.debug(client_msg)
     while(True):
-        events = p.poll()
         client_logger.info("Current events queue: %s" % events)
-        for fd, event in events:
-            c, addr = s.accept()
-            client_logger.debug("fd [%s] event [%s] addr [%s]" % (fd, event, addr))
-            r = c.recv(4096)
-            # size = struct.unpack("!I", r[:4])[0]
-            req = request_pb2.Request()
-            req.ParseFromString(r[4:])
-            #print(req.inner.msg, req.inner.seq, "FROM", req.inner.id)
-            client_msg = "[%s] SEQUENCE: %s - REPLICA: %s\n" % \
-                (time.time(), req.inner.seq, req.inner.id)
-            # f.write(client_msg)
-            client_logger.info(client_msg)
-            count += 1
-            if req.inner.seq % 100 == 0:
-            #if True:
-                client_logger.debug("CLIENT [%s] SEQUENCE: %s" % (CLIENT_ID, req.inner.seq))
+        client_logger.debug("fd [%s] event [%s] addr [%s]" % (fd, event, addr))
+        req = request_pb2.Request()
+        req.ParseFromString(r[4:])
+        #print(req.inner.msg, req.inner.seq, "FROM", req.inner.id)
+        client_msg = "[%s] SEQUENCE: %s - REPLICA: %s\n" % \
+            (time.time(), req.inner.seq, req.inner.id)
+        # f.write(client_msg)
+        client_logger.info(client_msg)
+        count += 1
+        if req.inner.seq % 100 == 0:
+        #if True:
+            client_logger.debug("CLIENT [%s] SEQUENCE: %s" % (CLIENT_ID, req.inner.seq))
         #if req.inner.seq == n:
         if count == n * len(RL):
             kill_flag = True
@@ -65,7 +58,7 @@ def recv_response(n):
 
 
 def send_requests():
-    client_logger.info("Starting send for bufflen %s" % len(m))
+    # client_logger.info("Starting send for bufflen %s" % len(m))
     bank.gen_accounts(len(RL))
     start_time = time.time()
     # for i in range(n):

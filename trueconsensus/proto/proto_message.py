@@ -110,6 +110,41 @@ class FastChainServicer(request_pb2_grpc.FastChainServicer):
     def Check(self, request, context):
         response = request_pb2.GenericResp()
         response.msg = request.inner.type
+        # import pdb; pdb.set_trace()
+        response.status = send_ack(request.inner.id)
+        # TODO: add request to node's log
+        return response
+
+    def NewTxnRequest(self, request, context):
+        # response = request_pb2.Transaction()
+        # data = response.data
+        # data.AccountNonce = request.data.AccountNonce
+        # data.Price = request.data.Price
+        # data.GasLimit = request.data.GasLimit
+        # data.Recipient = request.data.Recipient
+        # data.Amount = request.data.Amount
+        # data.Payload = request.data.Payload
+
+        response = request_pb2.GenericResp()
+        response.msg = "received transaction"
+        response.status = 200
+        # TODO: Add txn to node's txnpool
+        return response
+
+
+class FastChainServicer(request_pb2_grpc.FastChainServicer):
+    # send_ack is exposed here
+    def Send(self, request, context):
+        response = request_pb2.GenericResp()
+        response.msg = request.inner.type
+        response.status = send_ack(request.inner.id)
+        # TODO: add request to node's outbuffmap and log this request
+        return response
+    
+    def Check(self, request, context):
+        response = request_pb2.GenericResp()
+        response.msg = request.inner.type
+        # import pdb; pdb.set_trace()
         response.status = send_ack(request.inner.id)
         # TODO: add request to node's log
         return response

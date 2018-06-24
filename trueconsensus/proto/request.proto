@@ -27,6 +27,7 @@ service ClientReceiver {
     
     //Send new transaction to presumed leader node
     rpc PbftReplyReceiver (PbftBlock) returns (GenericResp) {}
+    rpc Check (GenericResp) returns (GenericResp) {}
 }
 
 

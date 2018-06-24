@@ -44,6 +44,10 @@ from trueconsensus.fastchain.bft_committee import NodeBFT, \
 from trueconsensus.fastchain.subprotocol import SubProtoDailyBFT, \
     Mempools
 
+from trueconsensus.proto import request_pb2, \
+    request_pb2_grpc, \
+    proto_message as message
+
 from trueconsensus.utils.interruptable_thread import InterruptableThread
 
 
@@ -90,6 +94,7 @@ def init_grpc_server(_id):
         quit("%s Ran out of replica list. No more server config to try" % E)
     
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    request_pb2_grpc.add_FastChainServicer_to_server(message.FastChainServicer(), server)
     server.add_insecure_port('%s:%s' % (ip, port))
     server.start()
     msg = "Node: [%s], Msg: [Starting gRPC server], Address: [%s:%s]" % (_id, ip, port)
@@ -105,7 +110,7 @@ class ThreadedExecution(InterruptableThread):
     def __init__(self, _id):
         self._id = _id
         self.countdown = 3 # time taken before node stops itself
-        self.grpc_obj = init_grpc_server(self._id)
+        self.server = init_grpc_server(self._id)
         InterruptableThread.__init__(self)
 
 
@@ -145,15 +150,19 @@ class ThreadedExecution(InterruptableThread):
             self._id, 
             0, 
             N, 
-            max_requests=config_yaml['testbed_config']['requests']['max']
+            max_requests=config_yaml['testbed_config']['requests']['max'],
+            max_retries=config_yaml['testbed_config']['max_retries']
         )
-        n.init_replica_map(self.grpc_obj)
+        replica_status = n.init_replica_map(self.server)
+        if not all(replica_status.values()):
+            _logger.warn("Couldn't reach all replica in the list. Unreachable => {%s}" % 
+                [i for i in replica_status if replica_status[i] is False])
         # grpc instance
         s = n.replica_map[n._id]
         _logger.info("Node: [%s], Current Primary: [%s]" % (n._id, n.primary))
         _logger.info("Node: [%s], Msg: [INIT SERVER LOOP]" % (n._id))
-        t = Timer(5, n.try_client)
-        t.start()
+        # t = Timer(5, n.try_client)
+        # t.start()
 
         while not self.is_stop_requested():
             data = None
@@ -214,7 +223,7 @@ class ThreadedExecution(InterruptableThread):
                             # less than size+4 as leftover crumbs
                             break
 
-        self.grpc_obj.stop(0)
+        self.server.stop(0)
         # n.debug_print_bank()
         sys.stdout.write("run exited\n")
         sys.stdout.flush()

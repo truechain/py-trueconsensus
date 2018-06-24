@@ -48,7 +48,7 @@ def load_yaml_config(path, no_val=False):
     with open(path, "r") as config_file:
         pbft_config = yaml.safe_load(config_file)
 
-    _logger.debug("PBFT config {} yaml loaded".format(path))
+    # _logger.debug("PBFT config {} yaml loaded".format(path))
 
     # # Validate base config for Browbeat format
     # _validate_yaml("pbft", pbft_config)

@@ -71,12 +71,14 @@ class Node(object):
     - reply
     '''
 
-    def __init__(self, _id, view, N, committee_addresses=[], max_requests=None):
+    def __init__(self, _id, view, N, 
+        committee_addresses=[], max_requests=None, max_retries=10):
         """
         @committee_addresses is a list of tuples containing the socket and ip addresses
         for all the nodes that are currently members of the committee
         """
         self.max_requests = max_requests
+        self.max_retries = max_retries
         self.kill_flag = False
         # self.ecdsa_key = ecdsa_sig.get_asymm_key(0, "verify")
         self.connections = 0
@@ -179,22 +181,29 @@ class Node(object):
 
     # TODO: include a failed send buffer, retry later
     def safe_send(self, _id, channel, req, test_connection=False):
-        try:
-            stub = request_pb2_grpc.FastChainStub(channel)
-            if test_connection:
-                success = False
-                count = 0
-                while (not success) and (count <= self.max_requests):
-                    # make the call and exit while loop, since this was just an INIT request
-                    response = stub.Check(req)
-                    assert response.msg == '200'
+        stub = request_pb2_grpc.FastChainStub(channel)
+        if test_connection:
+            success = False
+            retries = 0
+            import pdb; pdb.set_trace()
+            while retries <= self.max_requests:
+                # make the call and exit while loop, since this was just an INIT request
+                try:
+                    response = stub.Check(req, timeout=self.timeout)
+                    assert response.msg is 200
+                    _logger.info("Node: [%s], Phase: [INIT], Msg: [Connected to Replica %d]" % (self._id, _id))
+                    break
                     # leave it to server_loop to send requests from buffer
                     # else:
                     #     response = stub.Send(req)
-                    success = True
-        except:
-            _logger.error("gRPC channel for Node [%s] is not active. Retrying.." % _id)
-        if success:
+                except Exception as E:
+                    _logger.error("gRPC channel for Node [%s] is not active. Retrying.. (%s)" % (_id, retries))
+                    _logger.error("ErrorMsg => {%s}" % E)
+                    retries += 1
+                    time.sleep(1)
+            if retries > self.max_requests:
+                _logger.error("Node [%s], ErrorMsg: [Max retries reached], Target Replica: [%s]" % (self._id, _id))
+        else:
             self.outbuffmap[_id] += serialize(req)#.decode('latin-1')
 
 
@@ -217,6 +226,8 @@ class Node(object):
         # make this dynamic / event responsibe upon request of addition of new node (from BFT committee)
         # Also, this should trigger check margin for valid minimum number of nodes to be present 
         # to achieve BFT fault tolerance (N-1/3)
+        replica_tracker = dict.fromkeys(range(self.N, False), False)
+        replica_tracker[self._id] = True
         for i in range(self.N):
             if i == self._id:
                 continue
@@ -227,10 +238,9 @@ class Node(object):
             self.buffmap[i] = bytes()
             self.outbuffmap[i] = bytes()
             m = self.create_request("INIT", 0, str(self._id).encode("utf-8"))
-            self.safe_send(i, channel, m, test_connection=True)
-            msg = "init connection to replica %d" % i
-            _logger.info("Node: [%s], Phase: [INIT], Msg: [Connected to Replica %d]" % (self._id, i))
-
+            replica_tracker[i] = self.safe_send(i, channel, m, test_connection=True)
+            # msg = "init connection to replica %d" % i
+        return replica_tracker
 
     # type, seq, message, (optional) tag request
     def create_request(self, req_type, seq, msg, outer_req=None):
@@ -286,13 +296,14 @@ class Node(object):
 
     def send_to_client(self, msg):
         ip, port = CLIENT_ADDRESS
-        client_sock = socks.socksocket() # socket.socket()
-        # import pdb; pdb.set_trace()
-        client_sock.setproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", config.TOR_SOCKSPORT[self._id], True)
-        _logger.info("Node: [%s], Msg: [Dialing Client], Target: [%s:%s]" % (self._id, ip, port))
-        client_sock.connect((ip, port))
-        client_sock.send(msg)
-        client_sock.close()
+        # client_sock = socks.socksocket() # socket.socket()
+        # # import pdb; pdb.set_trace()
+        # client_sock.setproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", config.TOR_SOCKSPORT[self._id], True)
+        _logger.info("Node: [%s], Msg: [Dialing gRPC on Client], Target: [%s:%s]" % (self._id, ip, port))
+        # client_sock.connect((ip, port))
+        # client_sock.send(msg)
+        # client_sock.close()
+        
 
 
     def execute(self, req):
