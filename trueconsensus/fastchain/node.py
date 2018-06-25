@@ -3,6 +3,7 @@ import sys
 import time
 import grpc
 import struct
+from collections import defaultdict
 from threading import Timer, Thread, Lock, Condition
 
 from trueconsensus.dapps import bank
@@ -50,14 +51,14 @@ def record(file, message):
     file.write(str(time.time()) + "\t" + message + "\n")
 
 
-def record_pbft(file, request):
+def record_pbft(node_id, file, request):
     msg = "Req Type: [%s], Seq: [%d], Received From: [%d], In View: [%d]" % (
         request.inner.type,
         request.inner.seq,
         request.inner.id,
         request.inner.view
     )
-    _logger.info("Node: [%s], %s" % (self._id, msg))
+    _logger.info("Node: [%s], %s" % (node_id, msg))
     record(file, msg)
 
 
@@ -81,7 +82,6 @@ class Node(object):
         self.max_retries = max_retries
         self.kill_flag = False
         # self.ecdsa_key = ecdsa_sig.get_asymm_key(0, "verify")
-        self.connections = 0
         self._id = _id             # id
         self.view = view         # current view number
         self.view_active = True  # If we have majority agreement on view number
@@ -105,10 +105,11 @@ class Node(object):
         self.clientlock = Lock()
 
         self.fdmap = {}    # file descriptor to socket mapping
-        self.buffmap = {}  # file descriptor to incomming (recv) buffer mapping
-        self.outbuffmap = {}
+        self.incoming_buffer_map = defaultdict(list)  # file descriptor to incomming (recv) buffer mapping
+        self.outgoing_buffer_map = defaultdict(list)
         # message log for node communication related to the
         # PBFT protocol: [type][seq][id] -> request
+        # used to prepare blocks
         self.node_message_log = {
             "PRPR": {},
             "PREP": {},
@@ -179,40 +180,46 @@ class Node(object):
         self.prep_dict = {}
         self.comm_dict = {}
 
-    # TODO: include a failed send buffer, retry later
-    def safe_send(self, _id, channel, req, test_connection=False):
+    def unicast_message(self, _id, req, test_connection=False):
+        retries = 0
+        channel = self.replica_map[_id]
         stub = request_pb2_grpc.FastChainStub(channel)
-        if test_connection:
-            success = False
-            retries = 0
-            import pdb; pdb.set_trace()
-            while retries <= self.max_requests:
-                # make the call and exit while loop, since this was just an INIT request
-                try:
+        success = False
+        while retries <= self.max_requests:
+            # make the call and exit while loop, since this was just an INIT request
+            try:
+                if test_connection:
                     response = stub.Check(req, timeout=self.timeout)
-                    assert response.msg is 200
+                    # import pdb; pdb.set_trace()
+                    assert response.status is 200
                     _logger.info("Node: [%s], Phase: [INIT], Msg: [Connected to Replica %d]" % (self._id, _id))
-                    break
-                    # leave it to server_loop to send requests from buffer
-                    # else:
-                    #     response = stub.Send(req)
-                except Exception as E:
-                    _logger.error("gRPC channel for Node [%s] is not active. Retrying.. (%s)" % (_id, retries))
-                    _logger.error("ErrorMsg => {%s}" % E)
-                    retries += 1
-                    time.sleep(1)
-            if retries > self.max_requests:
-                _logger.error("Node [%s], ErrorMsg: [Max retries reached], Target Replica: [%s]" % (self._id, _id))
+                else:
+                    response = stub.Send(req)
+                success = True
+                break
+            except Exception as E:
+                _logger.error("gRPC channel for Node [%s] is not active. Retrying.. (%s)" % (_id, retries))
+                _logger.error("ErrorMsg => {%s}" % E)
+                retries += 1
+                time.sleep(1)
+        if retries > self.max_requests:
+            _logger.error("Node [%s], ErrorMsg: [Max retries reached], Target Replica: [%s]" % (self._id, _id))
+        if success:
+            _logger.info("Node [%s], Msg: [FastChainStub.Send()], Status: [200], Target Replica: [%s]" % (self._id, _id))
+            return True
         else:
-            self.outbuffmap[_id] += serialize(req)#.decode('latin-1')
+            return False
 
+    # TODO: include a failed send buffer, retry later
+    def safe_send(self, node_id, req):
+        self.outgoing_buffer_map[_id].append(req)
 
     def broadcast_to_nodes(self, req):
         counter = 0
-        for i, sock in self.replica_map.items():
+        for i, channel in self.replica_map.items():
             if i == self._id:
                 continue
-            self.safe_send(sock, req)
+            self.safe_send(i, channel, req)
             counter += 1
         msg = "broadcasted seq {} of type {} #{} times".format(str(req.inner.seq),
                                                    req.inner.type,
@@ -226,19 +233,21 @@ class Node(object):
         # make this dynamic / event responsibe upon request of addition of new node (from BFT committee)
         # Also, this should trigger check margin for valid minimum number of nodes to be present 
         # to achieve BFT fault tolerance (N-1/3)
-        replica_tracker = dict.fromkeys(range(self.N, False), False)
+        replica_tracker = dict.fromkeys(range(self.N), False)
         replica_tracker[self._id] = True
-        for i in range(self.N):
-            if i == self._id:
+        for target_node in range(self.N):
+            if target_node == self._id:
                 continue
-            remote_ip, remote_port = RL[i]
+            remote_ip, remote_port = RL[target_node]
             channel = grpc.insecure_channel('%s:%s' % (remote_ip, remote_port))
-            self.replica_map[i] = channel
-            self.fdmap[i] = channel
-            self.buffmap[i] = bytes()
-            self.outbuffmap[i] = bytes()
+            self.replica_map[target_node] = channel
+            self.fdmap[target_node] = channel
+            # instantiate buffmap[] and outbuffmap[] as we just sent out init req, 
+            # which gets processed immediately. So that self.clean() doesn't act out
+            self.incoming_buffer_map[target_node].append(None)
+            self.outgoing_buffer_map[target_node].append(None)
             m = self.create_request("INIT", 0, str(self._id).encode("utf-8"))
-            replica_tracker[i] = self.safe_send(i, channel, m, test_connection=True)
+            replica_tracker[target_node] = self.unicast_message(target_node, m, test_connection=True)
             # msg = "init connection to replica %d" % i
         return replica_tracker
 
@@ -299,6 +308,7 @@ class Node(object):
         # client_sock = socks.socksocket() # socket.socket()
         # # import pdb; pdb.set_trace()
         # client_sock.setproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", config.TOR_SOCKSPORT[self._id], True)
+
         _logger.info("Node: [%s], Msg: [Dialing gRPC on Client], Target: [%s:%s]" % (self._id, ip, port))
         # client_sock.connect((ip, port))
         # client_sock.send(msg)
@@ -359,29 +369,36 @@ class Node(object):
             t = Timer(5, self.suicide)
             t.start()
 
-    def clean(self, fd):
+    def clean(self, _id):
         #print("cleaning " + str(fd))
-        self.p.unregister(fd)
-        self.fdmap[fd].close()
-        del self.fdmap[fd]
-        del self.buffmap[fd]
-        del self.outbuffmap[fd]
-        self.connections -= 1
-        #print(self.connections)
+        try:
+            del self.fdmap[_id]
+            del self.incoming_buffer_map[_id]
+            del self.outgoing_buffer_map[_id]
+        except Exception as E:
+            _logger.debug(E)
 
-    def process_init(self, req, fd):
+    def process_init(self, req):
+        """
+        adds gRPC channel instance to replica_map[req.inner.id] 
+        and updates node history in log metadata
+        """
         if req.inner.id < 0:
             return None
         # TODO: fix this so we can do crash recovery
         if req.inner.id not in self.replica_map:
-            self.replica_map[req.inner.id] = self.fdmap[fd]
+            self.replica_map[req.inner.id] = self.fdmap[self._id]
         else:
+            # TODO: verify this check 
+            # (why are we wanting to update/clean only when req ID is > self ID?)
             if req.inner.id > self._id:
-                self.clean(self.replica_map[req.inner.id].fileno())
-                self.replica_map[req.inner.id] = self.fdmap[fd]
+                self.clean(req.inner.id)
+                self.replica_map[req.inner.id] = self.fdmap[self._id]
                 #record_pbft(self.debuglog, req)
                 self.add_node_history(req)
-                print("init connection with replica " + str(req.inner.id) + " on fd " + str(fd))
+                msg = "init connection with replica " + str(req.inner.id)
+                print(msg)
+                _logger.info(msg)
 
     def process_checkpoint(self, req, fd):
         pass
@@ -866,15 +883,20 @@ class Node(object):
 
         return
 
-
     # [type][seq][id] -> request
     def add_node_history(self, req):
+        """
+        Used to add consistency for buffer of requests
+        """
+        # if TYPE (INIT, PRPR, ..) not in node_message_log
         if req.inner.type not in self.node_message_log:
             self.node_message_log[req.inner.type] = {req.inner.seq : {req.inner.id : req}}
         else:
+            # if TYPE is present, but not SEQUENCE
             if req.inner.seq not in self.node_message_log[req.inner.type]:
                 self.node_message_log[req.inner.type][req.inner.seq] = {req.inner.id : req}
             else:
+                # IF TYPE & SEQUENCE present, but not req.inner.id 
                 self.node_message_log[req.inner.type][req.inner.seq][req.inner.id] = req
 
     def in_node_history(self, req):
@@ -885,16 +907,16 @@ class Node(object):
         if req.inner.id in self.node_message_log[req.inner.type][req.inner.seq]:
             return True
 
-    def parse_request(self, request_bytes, fd):
+    def parse_request(self, req):
         # attempt to reconstruct the request object
         # close connection and return on failure
         try:
-            # import pdb; pdb.set_trace()
-            req = request_pb2.Request()
-            req.ParseFromString(request_bytes)
+            # req = request_pb2.Request()
+            # req.ParseFromString(request_bytes)
             # _logger.debug(req)
             _logger.info("Node: [%s], Phase: [PARSE REQUEST], RequestInnerID: [%s]" % (self._id, req.inner.id))
-            record_pbft(self.debuglog, req)
+            # import pdb; pdb.set_trace()
+            record_pbft(self._id, self.debuglog, req)
             key = get_asymm_key(req.inner.id, ktype="sign")
             # if not isinstance(key, ecdsa.SigningKey):
             if not bool(key):
@@ -908,7 +930,7 @@ class Node(object):
             req = None
             _logger.error("Node: [%s], ErrorMsg => {ERROR IN PROTOBUF TYPES: %s}" % (self._id, E))
             # raise  # for debug
-            self.clean(fd)
+            # self.clean()
             return
         # print(req.inner.type, len(request_bytes))
         # TODO: Check for view number and view change, h/H
@@ -924,114 +946,15 @@ class Node(object):
                 _logger.warn("Bad view number - %s" % debug_msg)
                 return
         if self.in_node_history(req):
-            _logger.warn("Duplicate node message")
+            _logger.warn("Node: [%s], Msg: [Duplicate node message], Duplica: [%s]" % 
+                ((self._id, req.inner.id))
             # return
             pass
         if req.inner.type in self.request_types and not self.in_client_history(req):
             # call to actual success
-            self.request_types[req.inner.type](req, fd)
+            self.request_types[req.inner.type](req)
         else:
-            self.clean(fd)
+            self.clean(req.inner.id)
             _logger.warn("BAD MESSAGE TYPE - %s - %s" % (
                 req.inner.type,
                 req.inner.id))
-
-    # def server_loop(self):
-    #     """
-    #     call flow graph:
-
-    #     -> server_loop() -> parse_request() ->
-    #     self.request_types[req.inner.type]() -> [] process_client_request() ->
-    #     execute_in_order() -> execute() ->
-    #         - self.bank.process_request()
-    #         - client_sock.send()
-    #         - record()
-    #     -> suicide() when Max Requests reached..
-    #     """
-    #     # counter = 0
-
-    #     # self.fdmap[s.fileno] = s
-    #     # self.p.register(s, recv_mask)
-    #     s = self.replica_map[self._id]
-    #     _logger.info("Node: [%s], Current Primary: [%s]" % (self._id, self.primary))
-    #     _logger.info("Node: [%s], Msg: [INIT SERVER LOOP]" % (self._id))
-    #     t = Timer(5, self.try_client)
-    #     t.start()
-    #     while True:
-    #         #print(counter)
-    #         events = self.p.poll()
-    #         _logger.debug("Node: [%s], Msg: [Polling Queue], Events => {%s}" % (self._id, events))
-    #         #cstart = time.time()
-
-    #         # import pdb; pdb.set_trace()
-    #         for fd, event in events:
-    #             # counter += 1
-    #             # need the flag for "Service temporarilly unavailable" exception
-    #             data = None
-    #             recv_flag = False
-    #             if fd is s.fileno():
-    #                 c, addr = s.accept()
-    #                 _logger.debug("Node: [%s], Msg: [Got Connection], Address => {%s}" % (self._id, addr))
-    #                 #print("Got connection from " + str(addr))
-    #                 c.setblocking(0)
-    #                 #c.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
-    #                 self.p.register(c, recv_mask)
-    #                 self.fdmap[c.fileno()] = c
-    #                 self.buffmap[c.fileno()] = bytes()
-    #                 self.outbuffmap[c.fileno()] = bytes()
-    #                 self.connections += 1
-    #             else:
-    #                 # if we have a write event
-    #                 if event & send_mask != 0:
-    #                     if len(self.outbuffmap[fd]) > 0:
-    #                         try:
-    #                             rc = self.fdmap[fd].send(self.outbuffmap[fd])
-    #                             self.outbuffmap[fd] = self.outbuffmap[fd][rc:]
-    #                             if len(self.outbuffmap[fd]) == 0:
-    #                                 self.p.modify(fd, recv_mask)
-    #                         except:
-    #                             #raise
-    #                             self.clean(fd)
-    #                         continue
-
-    #                 if event & recv_mask != 0:
-    #                     try:
-    #                         data = self.fdmap[fd].recv(BUF_SIZE)
-    #                         recv_flag = True
-    #                     except Exception as E:
-    #                         _logger.error("Node: [%s], Msg: [%s]" % (self._id, E))
-    #                         self.clean(fd)
-    #                         continue
-    #                     #except socket.error, serr:
-    #                     #print("exception...")
-    #                     #print(serr)
-    #                     #self.clean(fd)
-    #                 if not data and recv_flag:
-    #                     try:
-    #                         peer_address = ":".join(str(i) for i in self.fdmap[fd].getpeername())
-    #                         _logger.debug("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], Address: [%s]" % (self._id, fd, peer_address))
-    #                     except Exception as E:
-    #                         _logger.error("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], ErrorMsg => {%s}" % (self._id, fd, E))
-    #                     self.clean(fd)
-    #                 elif recv_flag:
-    #                     _logger.debug("Node: [%s], ChunkLength: [%s]" % (self._id, len(data)))  # .decode('latin-1')))
-    #                     self.buffmap[fd] += data  # .decode('latin-1')
-    #                     while(len(self.buffmap[fd]) > 3):
-    #                         try:
-    #                             size = struct.unpack("!I", self.buffmap[fd][:4])[0]
-    #                         except Exception as E:
-    #                             _logger.error("Node: [%s], ErrorMsg => [%s]" % (self._id, E))
-    #                             break
-    #                             # import pdb; pdb.set_trace()
-
-    #                         if len(self.buffmap[fd]) >= size+4:
-    #                             self.parse_request(self.buffmap[fd][4:size+4], fd)
-    #                             if fd not in self.buffmap:
-    #                                 break
-    #                             self.buffmap[fd] = self.buffmap[fd][size+4:]
-    #                         else:
-    #                             # TODO: check if remaining buffmap of slice
-    #                             # less than size+4 as leftover crumbs
-    #                             break
-    #         if self.kill_flag:
-    #             sys.exit()

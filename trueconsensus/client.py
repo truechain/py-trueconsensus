@@ -22,8 +22,29 @@ from trueconsensus.fastchain.config import CLIENT_ADDRESS, \
 kill_flag = False
 start_time = time.time()
 
+def send_ack(_id):
+    # TODO: verifications/checks
+    return 200
 
-def recv_response(n):
+class ClientReceiverServicer(request_pb2_grpc.ClientReceiverServicer):
+    def PbftReplyReceiver(self, request, context):
+        response = request_pb2.PbftBlock()
+        recv_response(response, request)
+        return response
+
+
+    def Check(self, request, context):
+        response = request_pb2.GenericResp()
+        response.msg = request.inner.type
+        response.status = send_ack(request.inner.id)
+        recv_response(
+            request.inner.id, 
+            request, 
+            test_connection=True)
+        return response
+
+
+def recv_response(n, req, test_connection=False):
     global kill_flag
     count = 0
     print("RECEIVING")

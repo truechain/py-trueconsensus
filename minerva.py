@@ -4,7 +4,6 @@ import sys
 from argparse import RawTextHelpFormatter, \
                 ArgumentParser
 
-from trueconsensus import engine
 
 parser = ArgumentParser(formatter_class=RawTextHelpFormatter,
                         description="""Hybrid BFT based consensus - standalone engine""")
@@ -20,4 +19,10 @@ def consensus_usage():
                         help="")
 
 if __name__ == '__main__':
-    engine.main()
+    try:
+        from trueconsensus import engine
+        engine.main()
+        # from trueconsensus import engine_new
+        # engine_new.serve()
+    except KeyboardInterrupt:
+        sys.exit(1)

@@ -26,14 +26,14 @@ service ClientReceiver {
     // rpc CheckLeader (CheckLeaderReq) returns (CheckLeaderResp) {}
     
     //Send new transaction to presumed leader node
-    rpc PbftReplyReceiver (PbftBlock) returns (GenericResp) {}
+    rpc PbftReplyReceiver (PbftBlock) returns (Empty) {}
     rpc Check (GenericResp) returns (GenericResp) {}
 }
 
 
 message Request {
     message Inner {
-        int32 id = 1;
+        int32 id = 1; //from
         int32 seq = 2;
         int32 view = 3;
         string type = 4;
@@ -115,4 +115,8 @@ message TrueChain {
 message GenericResp {
     string msg = 1;
     int32  status = 2;
+}
+
+message Empty {
+
 }

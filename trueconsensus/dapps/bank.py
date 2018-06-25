@@ -1,11 +1,13 @@
 # import sqlite3
-import pickle
+# import pickle
+import plyvel
 
 from trueconsensus.proto import proto_message as message
 from trueconsensus.fastchain.config import config_general
 from trueconsensus.fastchain.config import client_logger
 from datetime import datetime
 
+from typing import Tuple
 
 class bank:
     def __init__(self, _id, number):
@@ -81,29 +83,40 @@ class bank:
         f.close()
 
 
-def retrieve_ledger(node_id):
-    ledger_loc = os.path.join(
-        config_general.get('node', 'ledger_location'),
-        'ledger_for_node_%d.db' % node_id
-    )
+def retrieve_ledger_loc(node_id, db_type=None):
+    if db_type != 'leveldb':
+        ledger_loc = os.path.join(
+            config_general.get('node', 'ledger_location'),
+            'ledger_for_node_%d.db' % node_id
+        )
+    else:
+        ledger_loc = os.path.join(
+            config_general.get('node', 'ledger_location'),
+            'ledger_for_node_%s' % node_id
+        )
     return ledger_loc
 
 def open_db_conn(node_id):
     try:
         # conn = sqlite3.connect(bank_ledger_loc)
         # c = conn.cursor()
-        db = open(retrieve_ledger(node_id), 'wb')
+        # db = open(retrieve_ledger_loc(node_id), 'wb')
         # db = pickledb.load(, False) 
+        db = plyvel.DB(
+            retrieve_ledger_loc(node_id), 
+            create_if_missing=True
+        )
     except Exception as E:
         import pdb; pdb.set_trace()
 
-    client_logger.debug("Opened Database connection..")
+    client_logger.debug("Node: [%s], Msg: [Opened Database connection..]" 
+        % node_id)
     return db
 
-def load_db_data(node_id):
-    db = open(retrieve_ledger(node_id), 'rb')
-    data = pickle.load(db)
-    return data
+# def load_db_data(node_id):
+#     db = open(retrieve_ledger(node_id), 'rb')
+#     data = pickle.load(db)
+#     return data
 
 def close_db_conn(node_id, db):
     try:
@@ -114,11 +127,17 @@ def close_db_conn(node_id, db):
     except Exception as E:
         import pdb; pdb.set_trace()
 
-    client_logger.debug("Closed Database connection..")
+    client_logger.debug("Node: [%s], Msg: [Closed Database connection..]" 
+        % node_id)
     return
 
-def write_to_db(data, db):
-    pickle.dump(data, db)
+def write_to_db(data_tuple: Tuple[bytes], db) -> None:
+    try:
+        db.put(*data_tuple)
+    except Exception as E:
+        client_logger.error(E)
+    client_logger.info(Success)
+    return None
 
 def gen_accounts(n, c):
     client_logger.debug("Generating %d accounts" % n)
