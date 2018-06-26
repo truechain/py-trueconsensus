@@ -77,6 +77,11 @@ class FastChainServicer(request_pb2_grpc.FastChainServicer):
         response = request_pb2.GenericResp()
         response.msg = request.inner.type
         response.status = send_ack(request.inner.id)
+        NODE_ID = request.dest
+        # print("%s => %s" % (_id, NODE_ID))
+        n = node_instances[NODE_ID] # NODE_ID is server's ID, that invoked its Check() with RPC 
+        n.incoming_buffer_map[_id].append(request)
+        n.parse_request(request)
         # TODO: add request to node's outbuffmap and log this request
         return response
     
@@ -88,26 +93,43 @@ class FastChainServicer(request_pb2_grpc.FastChainServicer):
         response.status = send_ack(request.inner.id)
         # TODO: add request to node's log
         _id = request.inner.id # id of server that sent the request (from)
-        print("%s => %s" % (_id, NODE_ID))
+        NODE_ID = request.dest
+        # print("%s => %s" % (_id, NODE_ID))
         n = node_instances[NODE_ID] # NODE_ID is server's ID, that invoked its Check() with RPC 
         n.incoming_buffer_map[_id].append(request)
         n.parse_request(request)
         return response
 
     def NewTxnRequest(self, request, context):
-        # response = request_pb2.Transaction()
-        # data = response.data
-        # data.AccountNonce = request.data.AccountNonce
-        # data.Price = request.data.Price
-        # data.GasLimit = request.data.GasLimit
-        # data.Recipient = request.data.Recipient
-        # data.Amount = request.data.Amount
-        # data.Payload = request.data.Payload
-
+        # actually receive data
+        # recv_flag = True
+        # except Exception as E:
+        #     _logger.error("Node: [%s], Msg: [%s]" % (n._id, E))
+        #     n.clean(fd)
         response = request_pb2.GenericResp()
-        response.msg = "received transaction"
-        response.status = 200
-        # TODO: Add txn to node's txnpool
+        NODE_ID = request.dest
+
+        # TODO:
+        # empty data -> close conn / check if applicable, 
+        # now that we have gRPC instead of socket
+        # import pdb; pdb.set_trace()
+        if not request.data:  # and recv_flag:
+            # print("%s => %s" % (_id, NODE_ID))
+            _logger.debug("Node: [%s], Msg: [Received Empty Data in Transaction]" % (NODE_ID))
+            # n.clean(NODE_ID)
+            response.msg = "No Content"
+            response.status = 204
+        else:
+            n = node_instances[NODE_ID] # NODE_ID is server's ID, that invoked its Check() with RPC 
+            # TODO: segregate into receiever
+            # finally got data on receval
+            # _logger.debug("Node: [%s], ChunkLength: [%s]" % (NODE_ID, len(data)))
+            n.txpool.append(request.data)
+            response.msg = "received transaction"
+            response.status = 200
+        _logger.debug("Node: [%s], Msg: [Received Client Request for Acc Nonce %s for Recipient %s]" % 
+            (NODE_ID, request.data.AccountNonce, request.data.Recipient))        
+        # TODO: Add txn to node's txnpool, regardless of bad request. Keep track
         return response
         
 
@@ -117,7 +139,6 @@ def suicide():
     # quit()
     print("Active Thread Count: ", active_count())
     os.kill(os.getpid(), signal.SIGINT)
-
 
 def signal_handler(event, frame):
     sys.stdout.write("handling signal: %s\n" % event)
@@ -132,7 +153,6 @@ def signal_handler(event, frame):
         t.start()
         print("Active Thread Count: ", active_count())
         sys.exit(130)  # Ctrl-C for bash
-
 
 def init_grpc_server(_id):
     global RL
@@ -202,7 +222,7 @@ class ThreadedExecution(InterruptableThread):
         s = n.replica_map[n._id]
         _logger.info("Node: [%s], Current Primary: [%s]" % (n._id, n.primary))
         msg = "Node: [%s], Msg: [INIT SERVER LOOP]" % (n._id)
-        sys.stdout.write(msg)
+        print(msg)
         _logger.info(msg)
         # t = Timer(5, n.try_client)
         # t.start()
@@ -210,74 +230,37 @@ class ThreadedExecution(InterruptableThread):
         while not self.is_stop_requested():
             # trigger events based on flags ?
             data = None
-            recv_flag = False
-            # if fd is s.fileno():
-            # TODO: put this in Send (TODO2: rename Send to Communicator or something)
-            # n.incoming_buffer_map[c.fileno()] = None
-            # n.outgoing_buffer_map[c.fileno()] = None
-            time.sleep(2)
-            _logger.debug("Node: [%s], Wait for 2 secs.." % (n._id))
 
-            # send data
-            if event & send_mask != 0:
-                if len(n.outgoing_buffer_map[fd]) > 0:
+            for target_node in range(N):
+                if target_node == self._id:
+                    continue
+
+                # send data
+                # TODO: send this reply to all slowchain members
+                if len(n.outgoing_buffer_map[target_node]) > 0:
                     try:
-                        # TODO: segregate write event into gRPC servicer
-                        # TODO: actuate gRPC stub here for Node Phase
-                        rc = n.fdmap[fd].send(n.outgoing_buffer_map[fd])
-                        n.outgoing_buffer_map[fd] = n.outgoing_buffer_map[fd][rc:]
-                        if len(n.outgoing_buffer_map[fd]) == 0:
-                            n.p.modify(fd, recv_mask)
+                        # TODO: integrate with config_yaml["bft_committee"]["block_frequency"]
+                        response = n.send_reply_to_client(target_node)
+                        n.outgoing_buffer_map[target_node].pop(-1)
+                        _logger.info("Node: [%s], Msg: [Block sent to client], Status: [%d], Response: [%s]"
+                            % (n._id, response.status, response.value))
+                        # new_txn = request_pb2.NewTxnRequest()
+                        # new_txn.data = message.gen_txn(nonce, price, gas_limit, _to, fee, asset_bytes)
+                    except IndexError:
+                        pass
                     except:
                         #raise
-                        n.clean(fd)
-                    continue
+                        n.clean(target_node)
 
-            # actually receive data
-            if event & recv_mask != 0:
-                try:
-                    # TODO: segregate read event in gRPC servicer 
-                    data = n.fdmap[fd].recv(BUF_SIZE)
-                    recv_flag = True
-                except Exception as E:
-                    _logger.error("Node: [%s], Msg: [%s]" % (n._id, E))
-                    n.clean(fd)
-                    continue
-                #self.clean(fd)
-            
-            # TODO:
-            # empty data -> close conn / check if applicable, 
-            # now that we have gRPC instead of socket
-            if not data and recv_flag:
-                try:
-                    peer_address = ":".join(str(i) for i in n.fdmap[fd].getpeername())
-                    _logger.debug("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], Address: [%s]" % (n._id, fd, peer_address))
-                except Exception as E:
-                    _logger.error("Node: [%s], Msg: [Close Connection], Event FileNum: [%s], ErrorMsg => {%s}" % (n._id, fd, E))
-                n.clean(fd)
+                # process outmap /inmap in the same loop?
+                while(len(n.incoming_buffer_map[target_node]) > config_yaml["bft_committee"]["block_size"]):
+                    # TODO: parse_request() could actually read from incoming requests
+                    # but maybe we might not wanna handle it this way
+                    n.parse_request(n.incoming_buffer_map[target_node][-1])
+                    n.incoming_buffer_map[target_node].pop(-1)
 
-            # TODO: segregate into receiever
-            # finally got data on receval
-            elif recv_flag:
-                _logger.debug("Node: [%s], ChunkLength: [%s]" % (n._id, len(data)))  # .decode('latin-1')))
-                n.incoming_buffer_map[fd] += data  # .decode('latin-1')
-                while(len(n.incoming_buffer_map[fd]) > 3):
-                    try:
-                        size = struct.unpack("!I", n.incoming_buffer_map[fd][:4])[0]
-                    except Exception as E:
-                        _logger.error("Node: [%s], ErrorMsg => [%s]" % (n._id, E))
-                        break
-                        # import pdb; pdb.set_trace()
-
-                    if len(n.incoming_buffer_map[fd]) >= size+4:
-                        n.parse_request(n.incoming_buffer_map[fd][4:size+4], fd)
-                        if fd not in n.incoming_buffer_map:
-                            break
-                        n.incoming_buffer_map[fd] = n.incoming_buffer_map[fd][size+4:]
-                    else:
-                        # TODO: check if remaining buffmap of slice
-                        # less than size+4 as leftover crumbs
-                        break
+            time.sleep(4)
+            _logger.debug("Node: [%s], Waiting for next batch.." % (n._id))
 
         self.server.stop(0)
         # n.debug_print_bank()
@@ -355,4 +338,8 @@ def main():
 
 if __name__ == "__main__":
     # import pdb; pdb.set_trace()
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        quit("Ctrl-C'ed. Exiting..")
+

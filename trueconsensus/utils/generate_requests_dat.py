@@ -24,7 +24,6 @@ def backspace(n):
     x = '\r' * n
     print(x, end="", flush=True)            # use '\r' to go back
 
-
 def gen_requests(max_requests, batch_size, f):
     client_key_pub = ecdsa_sig.get_asymm_key(CLIENT_ID-1, ktype='verify')
     client_key_pem = ecdsa_sig.get_asymm_key(CLIENT_ID-1, ktype='sign')

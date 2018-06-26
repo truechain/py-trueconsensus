@@ -1,7 +1,8 @@
 # import sqlite3
 # import pickle
+import os
 import plyvel
-
+import random
 from trueconsensus.proto import proto_message as message
 from trueconsensus.fastchain.config import config_general
 from trueconsensus.fastchain.config import client_logger
@@ -9,7 +10,8 @@ from datetime import datetime
 
 from typing import Tuple
 
-class bank:
+
+class Bank:
     def __init__(self, _id, number):
         self.accounts = {}
         self.number = number
@@ -83,79 +85,72 @@ class bank:
         f.close()
 
 
-def retrieve_ledger_loc(node_id, db_type=None):
-    if db_type != 'leveldb':
-        ledger_loc = os.path.join(
-            config_general.get('node', 'ledger_location'),
-            'ledger_for_node_%d.db' % node_id
-        )
-    else:
-        ledger_loc = os.path.join(
-            config_general.get('node', 'ledger_location'),
-            'ledger_for_node_%s' % node_id
-        )
-    return ledger_loc
+class Users(object):
+    def __init__(self):
+        pass
 
-def open_db_conn(node_id):
-    try:
-        # conn = sqlite3.connect(bank_ledger_loc)
-        # c = conn.cursor()
-        # db = open(retrieve_ledger_loc(node_id), 'wb')
-        # db = pickledb.load(, False) 
-        db = plyvel.DB(
-            retrieve_ledger_loc(node_id), 
-            create_if_missing=True
-        )
-    except Exception as E:
-        import pdb; pdb.set_trace()
+    def retrieve_ledger_loc(self, node_id=None, db_type=None):
+        if not node_id:
+            node_id = "client"
+        if db_type != 'leveldb':
+            ledger_loc = os.path.join(
+                config_general.get('node', 'ledger_location'),
+                'ledger_for_node_%s.db' % str(node_id)
+            )
+        else:
+            ledger_loc = os.path.join(
+                config_general.get('node', 'ledger_location'),
+                'ledger_for_node_%s' % node_id
+            )
+        return ledger_loc
+        
+    def open_db_conn(self, node_id=None):
+        try:
+            self.db = plyvel.DB(
+                self.retrieve_ledger_loc(node_id=node_id), 
+                create_if_missing=True
+            )
+        except Exception as E:
+            client_logger.error(E)
+            return
 
-    client_logger.debug("Node: [%s], Msg: [Opened Database connection..]" 
-        % node_id)
-    return db
+        client_logger.debug("Msg: [Opened Database connection..], ForNode: [%s]" 
+            % node_id)
 
-# def load_db_data(node_id):
-#     db = open(retrieve_ledger(node_id), 'rb')
-#     data = pickle.load(db)
-#     return data
 
-def close_db_conn(node_id, db):
-    try:
-        # db.commit()
-        # db.close()
-        db.close()
-        # write back to ledger
-    except Exception as E:
-        import pdb; pdb.set_trace()
+    def close_db_conn(self):
+        try:
+            self.db.close()
+        except Exception as E:
+            client_logger.error(E)
+            return
+        client_logger.debug("Msg: [Closed Database connection..]")
+        return
 
-    client_logger.debug("Node: [%s], Msg: [Closed Database connection..]" 
-        % node_id)
-    return
+    def write_to_db(self, data_tuple: Tuple[bytes], db) -> None:
+        try:
+            self.db.put(*data_tuple)
+        except Exception as E:
+            client_logger.error(E)
+            return
+        client_logger.info(Success)
+        return None
 
-def write_to_db(data_tuple: Tuple[bytes], db) -> None:
-    try:
-        db.put(*data_tuple)
-    except Exception as E:
-        client_logger.error(E)
-    client_logger.info(Success)
-    return None
+    def gen_accounts(self, n):
+        client_logger.debug("Generating %d accounts" % n)
+        # import pdb; pdb.set_trace()
+        try:
+            for cust_id in range(n):
+                acc_name = bytes("customer_%s" % cust_id, encoding='utf-8')
+                acc_price = bytes(str(random.randint(1, n)), encoding='utf-8')
+                self.db.put(acc_name, acc_price)
+                # TODO: add to log ledger, the txn info 
+                pass
+        except Exception as E:
+            client_logger.error(E)
 
-def gen_accounts(n, c):
-    client_logger.debug("Generating %d accounts" % n)
-    try:
-        # c.execute('''CREATE TABLE customers
-        #             (date text, name text, fiat real)''')
-        for i in range(n):
-            # TODO: add to log ledger, the txn info 
-            # c.execute("INSERT INTO customers VALUES ('%s','%s', %d)" % (
-            #     datetime.now().strftime("%Y-%m-%d"), 
-            #     "cust_id_%d" % i,
-            #     random.randint(1, 1000)
-            # )
-            pass
-    except Exception as E:
-        import pdb; pdb.set_trace()
+    def query_acc(self, _id, c):
+        pass
 
-    client_logger.debug("Generating %d accounts" % n)
-
-def query_acc(_id, c):
-    pass
+    def get_user_data(self, user_id):
+        pass

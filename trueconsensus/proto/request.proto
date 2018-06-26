@@ -51,6 +51,7 @@ message Request {
     // MsgSignature sig = 3;
     bytes sig = 3;
     bytes outer = 4;
+    int32 dest = 5;
 }
 
 message History {
@@ -72,7 +73,7 @@ message TxnData {
     int64  GasLimit		 = 3; // start gas?? 
     bytes  Recipient		 = 4; // to
     int64  Amount 		 = 5; // value
-    bytes  Payload		 = 6; // data
+    Payload  payload		 = 6; // data, change this to string
     
     int64  V 			 = 7;
     int64  R			 = 8;
@@ -80,8 +81,19 @@ message TxnData {
 
     bytes Hash			 = 10; // ?? 
 }
+
+// there should be various payload types defined. 
+// Protocol buffers picked up on the basis of request types
+
+message Payload  {
+    string txnType  =1;
+    int32 votecount = 2;
+}
+
 message Transaction {
     TxnData data 		 = 1;
+    int32 dest             = 2; // momentary hack, succour for node_instances[NODE_ID]
+    int32 source           = 3; // momentary hack, succour for node_instances[NODE_ID]
 }
 
 message Transactions {

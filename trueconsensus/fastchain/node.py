@@ -6,7 +6,7 @@ import struct
 from collections import defaultdict
 from threading import Timer, Thread, Lock, Condition
 
-from trueconsensus.dapps import bank
+from trueconsensus.dapps.bank import Bank
 from trueconsensus.fastchain.ecdsa_sig import get_asymm_key
 from trueconsensus.proto import request_pb2, \
     request_pb2_grpc, \
@@ -104,8 +104,9 @@ class Node(object):
         self.clientbuff = bytes()
         self.clientlock = Lock()
 
-        self.fdmap = {}    # file descriptor to socket mapping
-        self.incoming_buffer_map = defaultdict(list)  # file descriptor to incomming (recv) buffer mapping
+        self.grpc_channel_map = {}    
+        self.txpool = []
+        self.incoming_buffer_map = defaultdict(list)
         self.outgoing_buffer_map = defaultdict(list)
         # message log for node communication related to the
         # PBFT protocol: [type][seq][id] -> request
@@ -133,7 +134,7 @@ class Node(object):
         self.view_dict = {}   # [view num] -> [list of ids]
         # self.key_dict = {}
         self.replica_map = {}
-        self.bank = bank.bank(id, 1000)
+        self.bank = Bank(id, 1000)
         self.committee_ids = committee_addresses
 
         self.request_types = {
@@ -227,7 +228,7 @@ class Node(object):
         record(self.debuglog, msg)
 
     def init_replica_map(self, grpc_obj):
-        self.fdmap[self._id] = grpc_obj
+        self.grpc_channel_map[self._id] = grpc_obj
         self.replica_map[self._id] = grpc_obj
         # TODO: 
         # make this dynamic / event responsibe upon request of addition of new node (from BFT committee)
@@ -241,18 +242,18 @@ class Node(object):
             remote_ip, remote_port = RL[target_node]
             channel = grpc.insecure_channel('%s:%s' % (remote_ip, remote_port))
             self.replica_map[target_node] = channel
-            self.fdmap[target_node] = channel
+            self.grpc_channel_map[target_node] = channel
             # instantiate buffmap[] and outbuffmap[] as we just sent out init req, 
             # which gets processed immediately. So that self.clean() doesn't act out
-            self.incoming_buffer_map[target_node].append(None)
-            self.outgoing_buffer_map[target_node].append(None)
-            m = self.create_request("INIT", 0, str(self._id).encode("utf-8"))
+            # self.incoming_buffer_map[target_node].append(None)
+            # self.outgoing_buffer_map[target_node].append(None)
+            m = self.create_request("INIT", 0, str(self._id).encode("utf-8"), target=target_node)
             replica_tracker[target_node] = self.unicast_message(target_node, m, test_connection=True)
             # msg = "init connection to replica %d" % i
         return replica_tracker
 
     # type, seq, message, (optional) tag request
-    def create_request(self, req_type, seq, msg, outer_req=None):
+    def create_request(self, req_type, seq, msg, target=None, outer_req=None):
         key = get_asymm_key(self._id, ktype="sign")
         if not bool(key):
             _logger.error("Node: [%s], ErrorMsg => {get_asymm_key(): -> returned empty key}" % (self._id))
@@ -261,6 +262,8 @@ class Node(object):
         #     import pdb; pdb.set_trace()
         # msg = bytes(msg, encoding='utf-8')
         m = message.add_sig(key, self._id, seq, self.view, req_type, msg)
+        if target:
+            m.dest = target
         if outer_req:
             m.outer = outer_req.SerializeToString()
         return m
@@ -297,24 +300,17 @@ class Node(object):
             self.clientlock.acquire()
             if len(self.clientbuff) > 0:
                 try:
-                    self.send_to_client(self.clientbuff)
+                    self.send_reply_to_client(self.clientbuff)
                     self.clientbuff = bytes()
                 except Exception as E:
                     _logger.error("Node: [%s], ErrorMsg => {while trying client, encountered: %s}" % (self._id, E))
             self.clientlock.release()
 
-    def send_to_client(self, msg):
-        ip, port = CLIENT_ADDRESS
-        # client_sock = socks.socksocket() # socket.socket()
-        # # import pdb; pdb.set_trace()
-        # client_sock.setproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", config.TOR_SOCKSPORT[self._id], True)
-
-        _logger.info("Node: [%s], Msg: [Dialing gRPC on Client], Target: [%s:%s]" % (self._id, ip, port))
-        # client_sock.connect((ip, port))
-        # client_sock.send(msg)
-        # client_sock.close()
-        
-
+    def send_reply_to_client(self, target_node):
+        channel = self.grpc_channel_map[target_node]
+        stub = request_pb2_grpc.Client(channel)
+        response = stub.Send(n.outgoing_buffer_map[target_node], timeout=self.timeout)
+        return response
 
     def execute(self, req):
         """
@@ -340,9 +336,9 @@ class Node(object):
         #for i in range(1024):
         discard = self.bank.process_request(key, self._id, seq, client_req)
         #cond.release()
-        #if self._id == self.primary and fd in self.fdmap:
-        #if fd in self.fdmap:
-        #self.safe_send(self.fdmap[fd], m)
+        #if self._id == self.primary and fd in self.grpc_channel_map:
+        #if fd in self.grpc_channel_map:
+        #self.safe_send(self.grpc_channel_map[fd], m)
         #self.clean(fd)
         time.sleep(0.05)
         # TODO: hack
@@ -350,7 +346,7 @@ class Node(object):
         #while retry:
         self.clientlock.acquire()
         try:
-            self.send_to_client(self.clientbuff+serialize(m))
+            self.send_reply_to_client(self.clientbuff+serialize(m))
             self.clientbuff = bytes()
         except:
             _logger.warn("failed to send, adding to client outbuff")
@@ -372,8 +368,8 @@ class Node(object):
     def clean(self, _id):
         #print("cleaning " + str(fd))
         try:
-            del self.fdmap[_id]
-            del self.incoming_buffer_map[_id]
+            del self.grpc_channel_map[_id]
+            # del self.incoming_buffer_map[_id]
             del self.outgoing_buffer_map[_id]
         except Exception as E:
             _logger.debug(E)
@@ -387,18 +383,15 @@ class Node(object):
             return None
         # TODO: fix this so we can do crash recovery
         if req.inner.id not in self.replica_map:
-            self.replica_map[req.inner.id] = self.fdmap[self._id]
+            self.replica_map[req.inner.id] = self.grpc_channel_map[self._id]
         else:
             # TODO: verify this check 
             # (why are we wanting to update/clean only when req ID is > self ID?)
             if req.inner.id > self._id:
                 self.clean(req.inner.id)
-                self.replica_map[req.inner.id] = self.fdmap[self._id]
+                self.replica_map[req.inner.id] = self.grpc_channel_map[self._id]
                 #record_pbft(self.debuglog, req)
                 self.add_node_history(req)
-                msg = "init connection with replica " + str(req.inner.id)
-                print(msg)
-                _logger.info(msg)
 
     def process_checkpoint(self, req, fd):
         pass
@@ -944,12 +937,11 @@ class Node(object):
                     req.inner.view
                 )
                 _logger.warn("Bad view number - %s" % debug_msg)
+                # TODO: trigger view change
                 return
         if self.in_node_history(req):
-            _logger.warn("Node: [%s], Msg: [Duplicate node message], Duplica: [%s]" % 
-                ((self._id, req.inner.id))
-            # return
-            pass
+            _logger.warn("Node: [%s], Msg: [Duplicate node message], Duplicate: [%s]" % 
+                (self._id, req.inner.id))
         if req.inner.type in self.request_types and not self.in_client_history(req):
             # call to actual success
             self.request_types[req.inner.type](req)

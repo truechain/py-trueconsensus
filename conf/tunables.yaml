@@ -12,11 +12,15 @@ testbed_config:
 general:
   max_fail: 1
   base_port: 49500
-  tor_socksport_range: 9050,9150
+  # tor_socksport_range: 9050,9150
+grpc:
+  timeout: 60
 # refer to  README.md#parameterized-by-following section for these configurables
 slowchain:
   csize: 0
 bft_committee:
+  block_size: 10 # no of txns in a block
+  block_frequency: 1 # No. of seconds a block is sent out by the committee members
   lambda: 1
   timeout: 300 # seconds
   tbft: 1
