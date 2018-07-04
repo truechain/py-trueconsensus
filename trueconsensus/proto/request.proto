@@ -12,6 +12,16 @@ service FastChain {
     rpc Send (Request) returns (GenericResp) {}
 }
 
+service SerializerTest {
+    rpc TestHash(Block) returns (Hash) {}
+}
+ 
+// Hash result 
+message Hash {
+    bytes hash = 1;
+    Block block = 2;
+}
+
 // //Interface exposed by client
 // service Client {
 //         //RPC service that responds whether the node is the leader
@@ -26,7 +36,7 @@ service ClientReceiver {
     // rpc CheckLeader (CheckLeaderReq) returns (CheckLeaderResp) {}
     
     //Send new transaction to presumed leader node
-    rpc PbftReplyReceiver (PbftBlock) returns (Empty) {}
+    rpc PbftReplyReceiver (TruePbftBlock) returns (Empty) {}
     rpc Check (GenericResp) returns (GenericResp) {}
 }
 
@@ -37,7 +47,7 @@ message Request {
         int32 seq = 2;
         int32 view = 3;
         string type = 4;
-        PbftBlock block = 5;
+        TruePbftBlock block = 5;
         int32 timestamp = 6;
     }
 
@@ -67,13 +77,15 @@ message Nodes {
     repeated TruePbftNode nodes = 1;
 }
 
+// https://medium.com/blockchannel/life-cycle-of-an-ethereum-transaction-e5c66bae0f6e
 message TxnData {
     uint64 AccountNonce       	 = 1; // Nonce
-    int64  Price 	     	 = 2; // Gas Price
-    int64  GasLimit		 = 3; // start gas?? 
+    int64  Price 	     	 = 2; // Gas Price per unit sender is willing to set for contract
+    int64  GasLimit		 = 3; // start gas??
     bytes  Recipient		 = 4; // to
-    int64  Amount 		 = 5; // value
-    Payload  payload		 = 6; // data, change this to string
+    int64  Amount 		 = 5; // value / 0 in case there's just BFT voting through VRF + csize + stake_in/out
+    // Payload  payload		 = 6; // data, change this to bytes later
+    bytes  payload		 = 6;
     
     int64  V 			 = 7;
     int64  R			 = 8;
@@ -96,21 +108,20 @@ message Transaction {
     int32 source           = 3; // momentary hack, succour for node_instances[NODE_ID]
 }
 
-message Transactions {
-    repeated Transaction txns = 1;
-}
-
-message PbftBlockHeader {
+message TruePbftBlockHeader {
     int64  Number 	= 1;
     int64  GasLimit     = 2;
     int64  GasUsed	= 3;
     int64  Time		= 4;
+    bytes parent_hash = 5;
+    bytes uncles_hash = 6;
 }
 
-message PbftBlock {
-    PbftBlockHeader   header    = 1;
-    Transactions      txns      = 2;
-    repeated string   signs     = 3;   
+message TruePbftBlock {
+    TruePbftBlockHeader   header    = 1;
+    repeated Transaction      Transactions      = 2;
+    repeated TruePbftBlockHeader uncles = 3;
+    repeated string   sig     = 4;   
 }
 
 message TruePbftNode {
@@ -120,8 +131,8 @@ message TruePbftNode {
 }
 
 message TrueChain {
-    repeated PbftBlock blocks   = 1;
-    PbftBlockHeader  lastHeader = 2;
+    repeated TruePbftBlock blocks   = 1;
+    TruePbftBlockHeader  lastHeader = 2;
 }
 
 message GenericResp {

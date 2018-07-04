@@ -102,7 +102,7 @@ class ClientReceiverStub(object):
     """
     self.PbftReplyReceiver = channel.unary_unary(
         '/fastchain.ClientReceiver/PbftReplyReceiver',
-        request_serializer=request__pb2.PbftBlock.SerializeToString,
+        request_serializer=request__pb2.TruePbftBlock.SerializeToString,
         response_deserializer=request__pb2.Empty.FromString,
         )
     self.Check = channel.unary_unary(
@@ -145,7 +145,7 @@ def add_ClientReceiverServicer_to_server(servicer, server):
   rpc_method_handlers = {
       'PbftReplyReceiver': grpc.unary_unary_rpc_method_handler(
           servicer.PbftReplyReceiver,
-          request_deserializer=request__pb2.PbftBlock.FromString,
+          request_deserializer=request__pb2.TruePbftBlock.FromString,
           response_serializer=request__pb2.Empty.SerializeToString,
       ),
       'Check': grpc.unary_unary_rpc_method_handler(

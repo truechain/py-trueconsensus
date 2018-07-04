@@ -3,6 +3,14 @@
 - [ ] Separate Dapp architecture: `dapps/bank.py` is currently tightly coupled with node.py. 
 - [ ] no gRPC communiction between nodes yet
 - [ ] add network_latency check 
+- [ ] GAS estimator func
+- [ ] VRF + EVM + ledger
+- [ ] refactor bank.py and levelDB
+- [ ] orchestration for hybrid
+- [ ] gRPC / RLP
+- [ ] uncles / payload / genesis simulation and tests
+- [ ] transaction simulation 
+- [ ] OOG checks - Out of GAS for transaction 
 
 ## Fastchain
 

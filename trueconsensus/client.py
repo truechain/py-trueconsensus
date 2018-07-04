@@ -62,12 +62,18 @@ def stamp_to_chain(req, test_connection=False):
         # f.close()
 
 
+def gen_requests():
+    client_key_pub = ecdsa_sig.get_asymm_key(CLIENT_ID-1, ktype='verify')
+    client_key_pem = ecdsa_sig.get_asymm_key(CLIENT_ID-1, ktype='sign')
+    keys_to_seq_tracker = defaultdict.fromkeys(range(N), 0)
+    
 def send_requests(all_done=False):
     UserTap = Users()
     UserTap.open_db_conn()
     UserTap.gen_accounts(len(RL))
     start_time = time.time()
     RL_REQUEST_TRACKER = dict.fromkeys(range(N), False)
+     
     while not all_done:
         for target_node in range(N):
             if target_node == CLIENT_ID:
@@ -88,7 +94,7 @@ def send_requests(all_done=False):
                 # signify request being sent
                 RL_REQUEST_TRACKER[target_node] = True
             except Exception as e:  # broad catch
-                # import pdb; pdb.set_trace()
+                import pdb; pdb.set_trace()
                 client_logger.error("Msg: [failed to send], Target: [%s:%s], Error => {%s}" % \
                                     (*RL[target_node], e))
         if all(RL_REQUEST_TRACKER.values()):

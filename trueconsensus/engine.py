@@ -81,7 +81,7 @@ class FastChainServicer(request_pb2_grpc.FastChainServicer):
         # print("%s => %s" % (_id, NODE_ID))
         n = node_instances[NODE_ID] # NODE_ID is server's ID, that invoked its Check() with RPC 
         n.incoming_buffer_map[_id].append(request)
-        n.parse_request(request)
+        # n.parse_request(request) # TODO: do this in thread.run()
         # TODO: add request to node's outbuffmap and log this request
         return response
     
@@ -96,7 +96,7 @@ class FastChainServicer(request_pb2_grpc.FastChainServicer):
         NODE_ID = request.dest
         # print("%s => %s" % (_id, NODE_ID))
         n = node_instances[NODE_ID] # NODE_ID is server's ID, that invoked its Check() with RPC 
-        n.incoming_buffer_map[_id].append(request)
+        # n.incoming_buffer_map[_id].append(request)
         n.parse_request(request)
         return response
 
@@ -196,11 +196,12 @@ class ThreadedExecution(InterruptableThread):
         """        
         sys.stdout.write("run started\n")
         sys.stdout.flush()
-
+        block_size = config_yaml["bft_committee"]["block_size"]
         n = node.Node(
             self._id, 
             0, 
             N, 
+            block_size=block_size,
             max_requests=config_yaml['testbed_config']['requests']['max'],
             max_retries=config_yaml['testbed_config']['max_retries']
         )
@@ -253,11 +254,21 @@ class ThreadedExecution(InterruptableThread):
                         n.clean(target_node)
 
                 # process outmap /inmap in the same loop?
-                while(len(n.incoming_buffer_map[target_node]) > config_yaml["bft_committee"]["block_size"]):
-                    # TODO: parse_request() could actually read from incoming requests
-                    # but maybe we might not wanna handle it this way
-                    n.parse_request(n.incoming_buffer_map[target_node][-1])
-                    n.incoming_buffer_map[target_node].pop(-1)
+                if n.primary is n._id: #and n.invalid_primary is not True:
+                    while(len(n.txpool) > config_yaml["bft_committee"]["block_size"]):
+                        # if n.clear_for_next_block:
+                        # form a REQU type request from here on, 
+                        # previously handled by generate_requests_dat script
+                        # req = message.add_sig(current_key, _id, seq, view, "REQU", msg, i)
+                        block_pool = n.txpool[-block_size:]
+                        n.process_client_request(block_pool)
+                        del n.txpool[-block_size:] 
+                        n.last_block_pool = block_pool # but keep n.block_pool for backup
+                        # n.parse_request(n.incoming_buffer_map[target_node][-1])
+                        # n.incoming_buffer_map[target_node].pop(-1)
+                        # else:
+                        #     _logger.info("Node: [%s], Msg: [Block in Wait queue]" % (n._id))
+                        #     continue
 
             time.sleep(4)
             _logger.debug("Node: [%s], Waiting for next batch.." % (n._id))

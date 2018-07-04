@@ -1,6 +1,7 @@
 from Crypto.Hash import SHA256
 import struct
 import random
+import cbor
 
 # import sig
 from trueconsensus.proto import request_pb2, request_pb2_grpc
@@ -25,16 +26,22 @@ def gen_txn_data(txn_data):
     # s = int(s, 16)
     # v = int(v, 16)    
     txn_data.AccountNonce = random.randint(1,999)
-    txn_data.Price = random.randint(1,999)
-    txn_data.GasLimit = random.randint(1,999)
+    txn_data.Price = random.randint(500, 1000)
+    txn_data.GasLimit = random.randint(10000,50000)
     txn_data.Recipient = b'0xa593094cebb06bf34df7311845c2a34996b52324'
-    txn_data.Amount = random.randint(1,999)
-    txn_data.payload.txnType = "CDO"
-    txn_data.payload.votecount = random.randint(1,999)
+    txn_data.V = int("0x1c", 16)
+    txn_data.R = int("0xab90122dc4e4bbdbb14ef22ad3ae21aecc19a1c90a9c8989c68b26cc782ff303", 16)
+    txn_data.S = int("0x36e5f275147049d3afd5d33b735cc9313d2c1aad3ab401aefdce678128e2f1d0", 16)
+    txn_data.Amount = random.randint(1,999) 
+    fin_entities = ["CDO", "CLO", "MBS", "ABS","CDS", "Derivative", "BDO"]
+    payload = {
+        "txnType": random.choice(fin_entities),
+        "votecount": random.randint(1,999)
+    }
+    txn_data.payload = cbor.dumps(payload)
     return txn_data
 
-
-def add_sig(key, _id, seq, view, req_type, message, timestamp=None):
+def add_sig(key, _id, seq, view, req_type, message, txpool=None, timestamp=None):
     """
     @key
     @_id
@@ -51,7 +58,11 @@ def add_sig(key, _id, seq, view, req_type, message, timestamp=None):
     inner.seq = seq
     inner.view = view
     inner.type = req_type
-    # block = inner.block
+    if txpool:
+        # use rlp and maybe change add_sig() to a class inheriting
+        block = inner.block
+        # txn = req.Transactions.add()
+        block.Transactions.extend(txpool)
     if timestamp:
         inner.timestamp = timestamp
     #req.inner = inner

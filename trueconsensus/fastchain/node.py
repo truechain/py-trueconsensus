@@ -72,7 +72,7 @@ class Node(object):
     - reply
     '''
 
-    def __init__(self, _id, view, N, 
+    def __init__(self, _id, view, N, block_size=10,
         committee_addresses=[], max_requests=None, max_retries=10):
         """
         @committee_addresses is a list of tuples containing the socket and ip addresses
@@ -103,11 +103,13 @@ class Node(object):
         # hack
         self.clientbuff = bytes()
         self.clientlock = Lock()
-
         self.grpc_channel_map = {}    
-        self.txpool = []
-        self.incoming_buffer_map = defaultdict(list)
-        self.outgoing_buffer_map = defaultdict(list)
+        self.block_size = block_size
+        self.last_block_pool = []
+        self.txpool = [] # actual txn pool filled from req received by the client
+        self.incoming_buffer_map = defaultdict(list) # buffer for incoming requests in between phases (rounds)
+        self.outgoing_buffer_map = defaultdict(list) # buffer for requests sent in between phases
+        self.client_reply_pool = [] # blocks ready for transportation to the client go in this
         # message log for node communication related to the
         # PBFT protocol: [type][seq][id] -> request
         # used to prepare blocks
@@ -253,15 +255,17 @@ class Node(object):
         return replica_tracker
 
     # type, seq, message, (optional) tag request
-    def create_request(self, req_type, seq, msg, target=None, outer_req=None):
+    def create_request(self, req_type, seq, msg, txpool=None, target=None, outer_req=None):
         key = get_asymm_key(self._id, ktype="sign")
         if not bool(key):
             _logger.error("Node: [%s], ErrorMsg => {get_asymm_key(): -> returned empty key}" % (self._id))
             return
-        # if req_type == "PRPR":
+        if req_type == "PRPR":
+            m = message.add_sig(key, self._id, seq, self.view, req_type, msg, txpool=txpool)
+        else:
+            m = message.add_sig(key, self._id, seq, self.view, req_type, msg)
         #     import pdb; pdb.set_trace()
         # msg = bytes(msg, encoding='utf-8')
-        m = message.add_sig(key, self._id, seq, self.view, req_type, msg)
         if target:
             m.dest = target
         if outer_req:
@@ -458,40 +462,42 @@ class Node(object):
         # TODO start a time for the view change operation
         # TODO set flag to stop processing requests
 
-    def process_client_request(self, req, fd):
-        _logger.info("Node: [%s], Phase: [PROCESS CLIENT REQ], Event FD: [%s]" % (self._id, fd))
-        if req.inner.timestamp == 0:
-            pass
-            #print(req.inner.msg)
-        if req.dig in self.active:
-            client_req, t, fd = self.active[req.dig]
-            if client_req is None:
-                self.active[req.dig] = (req, t, fd)
-                if req.dig in self.comm_dict and self.comm_dict[req.dig].prepared:
-                    m = self.comm_dict[req.dig].req
-                    self.execute_in_order(m)
-            return
+    def process_client_request(self, current_txn_pool):
+        _logger.info("Node: [%s], Phase: [PROCESS CLIENT REQ]" % (self._id))
+        # if req.inner.timestamp == 0:
+        #     pass
+        #     #print(req.inner.msg)
+        # if req.dig in self.active:
+        #     client_req, t, fd = self.active[req.dig]
+        #     if client_req is None:
+        #         self.active[req.dig] = (req, t, fd)
+        #         if req.dig in self.comm_dict and self.comm_dict[req.dig].prepared:
+        #             m = self.comm_dict[req.dig].req
+        #             self.execute_in_order(m)
+        #     return
 
-        self.lock.acquire()
-        if self.view_active:
-            view = self.view
-        else:
-            self.lock.release()
-            return
-        self.add_client_history(req)
-        request_timer = Timer(self.timeout, self.handle_timeout, [req.dig, req.inner.view])
-        request_timer.daemon = True
-        request_timer.start()
-        self.active[req.dig] = (req, request_timer, fd)
-        self.lock.release()
+        # self.lock.acquire()
+        # if self.view_active:
+        #     view = self.view
+        # else:
+        #     self.lock.release()
+        #     return
+        # self.add_client_history(req)
+        # request_timer = Timer(self.timeout, self.handle_timeout, [req.dig, req.inner.view])
+        # request_timer.daemon = True
+        # request_timer.start()
+        # self.active[req.dig] = (req, request_timer, fd)
+        # self.lock.release()
 
-        if self.primary == self._id:
-            self.seq = self.seq+1
-            #m = self.create_request("PRPR", self.seq, req.dig, req)
-            m = self.create_request("PRPR", self.seq, req.dig)
-            self.add_node_history(m)
-            record_pbft(self.debuglog, m)
-            self.broadcast_to_nodes(m)
+        self.seq = self.seq+1
+        m = self.create_request("PRPR", self.seq, req.dig, req, txpool=current_txn_pool)
+        self.add_node_history(m)
+        record_pbft(self.debuglog, m)
+        self.broadcast_to_nodes(m)
+        # self.block_pool.append(m)
+        # if len(self.block_pool) == self.block_size:
+        #     self.broadcast_to_nodes(self.block_pool)
+        #     self.block_pool = []
         # TODO: if client sends to a backup, retransmit to primary
         # or not..... maybe better to save bandwidth
 
@@ -538,6 +544,9 @@ class Node(object):
             return False
 
     def process_preprepare(self, req, fd):
+        """
+        Process PrePrepare requests
+        """
         _logger.info("Node: [%s], Phase: [PRE-PREPARE], Event FD: [%s]" % (self._id, fd))
 
         if req.inner.seq in self.node_message_log["PRPR"]:
@@ -596,6 +605,9 @@ class Node(object):
                 self.execute_in_order(m)
 
     def process_prepare(self, req, fd):
+        """
+        Process Prepare requests
+        """
         _logger.info("Node: [%s], Phase: [PREPARE], Event FD: [%s]" % (self._id, fd))
         self.add_node_history(req)
         self.inc_prep_dict(req.inner.msg)
@@ -615,6 +627,9 @@ class Node(object):
                 self.execute_in_order(m)
 
     def process_commit(self, req, fd):
+        """
+        Process Commit requests in New view
+        """
         _logger.info("Node: [%s], Phase: [COMMIT], Event DF: [%s]" % (self._id, fd))
 
         self.add_node_history(req)
@@ -626,6 +641,9 @@ class Node(object):
 
 
     def vprocess_checkpoints(self, vcheck_list, last_checkpoint):
+        """
+        Process Checkpoints requests in New view
+        """
         #rc = vprocess_checkpoints(vcheck_list, r.inner.seq)
         if last_checkpoint == 0:
             return True
@@ -640,6 +658,9 @@ class Node(object):
 
     #vprocess_prepare(vprep_dict, vpre_dict, r.inner.seq)
     def vprocess_prepare(self, vprep_dict, vpre_dict, last_checkpoint):
+        """
+        Process Prepare requests in New view
+        """
         max = 0
         #[seq][id] -> req
         counter = {}
@@ -794,6 +815,9 @@ class Node(object):
             print("Entering New view", self.view)
 
     def nvprocess_prpr(self, prpr_list):
+        """
+        Process PrePrepare requests in New view
+        """
         for r in prpr_list:
             key = get_asymm_key(r.inner.id, ktype="sign")
             if not bool(key):
