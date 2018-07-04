@@ -2,20 +2,25 @@
 # name: pbft base configuration
 testbed_config:
   total: 5 # excluding base client
-  client_id: 5 # total-1 => 0-indexed
-  server_id_init: 4 # => 0 indexed
+  client_id: 5 # total-1 => 0-indexed # TODO -> add threaded multi client request support, and check for id->seq consistency 
+  server_id_init: 4 # N => 0 indexed
   threading_enabled: true
+  max_retries: 5
   requests:
-    max: 256
-    batch_size: 32
+    max: 12
+    batch_size: 4
 general:
   max_fail: 1
   base_port: 49500
-  tor_socksport_range: 9050,9150
+  # tor_socksport_range: 9050,9150
+grpc:
+  timeout: 60
 # refer to  README.md#parameterized-by-following section for these configurables
 slowchain:
   csize: 0
 bft_committee:
+  block_size: 10 # no of txns in a block
+  block_frequency: 1 # No. of seconds a block is sent out by the committee members
   lambda: 1
   timeout: 300 # seconds
   tbft: 1

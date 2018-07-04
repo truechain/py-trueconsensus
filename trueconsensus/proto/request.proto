@@ -1,23 +1,145 @@
-syntax = "proto2";
+syntax = "proto3";
 
-package request;
+package fastchain;
+
+
+//Interface exposed by pbft committee nodes
+service FastChain {
+    //Send new transaction to presumed leader node
+    rpc NewTxnRequest (Transaction) returns (GenericResp) {}
+    // rpc BroadcastByGRPC (Request) returns (GenericResp) {}
+    rpc Check (Request) returns (GenericResp) {}
+    rpc Send (Request) returns (GenericResp) {}
+}
+
+service SerializerTest {
+    rpc TestHash(Block) returns (Hash) {}
+}
+ 
+// Hash result 
+message Hash {
+    bytes hash = 1;
+    Block block = 2;
+}
+
+// //Interface exposed by client
+// service Client {
+//         //RPC service that responds whether the node is the leader
+//         // rpc CheckLeader (CheckLeaderReq) returns (CheckLeaderResp) {}
+        
+//         //Send new transaction to presumed leader node
+//         rpc NewTxnRequest (Transaction) returns (GenericResp) {}
+// }
+
+service ClientReceiver {
+    //RPC service that responds whether the node is the leader
+    // rpc CheckLeader (CheckLeaderReq) returns (CheckLeaderResp) {}
+    
+    //Send new transaction to presumed leader node
+    rpc PbftReplyReceiver (TruePbftBlock) returns (Empty) {}
+    rpc Check (GenericResp) returns (GenericResp) {}
+}
+
 
 message Request {
     message Inner {
-        required int32 id = 1;
-        required int32 seq = 2;
-        required int32 view = 3;
-        required string type = 4;
-        required bytes msg = 5;
-        optional int32 timestamp = 6;
+        int32 id = 1; //from
+        int32 seq = 2;
+        int32 view = 3;
+        string type = 4;
+        TruePbftBlock block = 5;
+        int32 timestamp = 6;
     }
 
-    required Inner inner = 1;
-    required bytes dig = 2;
-    required bytes sig = 3;
-    optional bytes outer = 4;
+    // message MsgSignature {
+    //         bytes r = 1;
+    //         bytes s = 2;
+    // }
+
+    Inner inner = 1;
+    bytes dig = 2;
+    // MsgSignature sig = 3;
+    bytes sig = 3;
+    bytes outer = 4;
+    int32 dest = 5;
 }
 
 message History {
     repeated Request req = 1;
+}
+
+message CheckLeaderReq {}
+message CheckLeaderResp {
+        bool message = 1;
+}
+
+message Nodes {
+    repeated TruePbftNode nodes = 1;
+}
+
+// https://medium.com/blockchannel/life-cycle-of-an-ethereum-transaction-e5c66bae0f6e
+message TxnData {
+    uint64 AccountNonce       	 = 1; // Nonce
+    int64  Price 	     	 = 2; // Gas Price per unit sender is willing to set for contract
+    int64  GasLimit		 = 3; // start gas??
+    bytes  Recipient		 = 4; // to
+    int64  Amount 		 = 5; // value / 0 in case there's just BFT voting through VRF + csize + stake_in/out
+    // Payload  payload		 = 6; // data, change this to bytes later
+    bytes  payload		 = 6;
+    
+    int64  V 			 = 7;
+    int64  R			 = 8;
+    int64  S			 = 9;
+
+    bytes Hash			 = 10; // ?? 
+}
+
+// there should be various payload types defined. 
+// Protocol buffers picked up on the basis of request types
+
+message Payload  {
+    string txnType  =1;
+    int32 votecount = 2;
+}
+
+message Transaction {
+    TxnData data 		 = 1;
+    int32 dest             = 2; // momentary hack, succour for node_instances[NODE_ID]
+    int32 source           = 3; // momentary hack, succour for node_instances[NODE_ID]
+}
+
+message TruePbftBlockHeader {
+    int64  Number 	= 1;
+    int64  GasLimit     = 2;
+    int64  GasUsed	= 3;
+    int64  Time		= 4;
+    bytes parent_hash = 5;
+    bytes uncles_hash = 6;
+}
+
+message TruePbftBlock {
+    TruePbftBlockHeader   header    = 1;
+    repeated Transaction      Transactions      = 2;
+    repeated TruePbftBlockHeader uncles = 3;
+    repeated string   sig     = 4;   
+}
+
+message TruePbftNode {
+    string addr	     = 1;
+    string pubkey    = 2;
+    string privkey   = 3;
+}
+
+message TrueChain {
+    repeated TruePbftBlock blocks   = 1;
+    TruePbftBlockHeader  lastHeader = 2;
+}
+
+message GenericResp {
+    string msg = 1;
+    int32  status = 2;
+}
+
+message Empty {
+
 }

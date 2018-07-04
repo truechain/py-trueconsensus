@@ -18,21 +18,36 @@
 
 import os
 import uuid
+import json
 import random
-from db.backends.level import LevelDB
+import time
 
-from fastchain import ecdsa_sig as sig
-from fastchain.log_maintainer import LedgerLog
-from fastchain.config import config_yaml
+from trueconsensus.db.backends.level import LevelDB
+from trueconsensus.fastchain import ecdsa_sig as sig
+from trueconsensus.fastchain.log_maintainer import LedgerLog
+from trueconsensus.fastchain.config import config_yaml, _logger
 # from logging import ledger
 
-from fastchain.node import Node
+from trueconsensus.fastchain.node import Node
 
 from collections import OrderedDict, \
     defaultdict, \
     namedtuple  # for transaction tuple, use struct?
 
 LAMBDA = config_yaml['bft_committee']['lambda']
+
+# TODO: handle with protobuf / gRPC
+GOSSIP_CONTEXT = {
+    "VIEW_CHANGE": {
+        "COMPLAIN": "replace_corrupt_node",
+        "K_TIMEOUT": "replace_committee",
+    },
+    "DAILY_LOG": {
+        "SIGN": "request_verify_log",
+        "BATCHED": "dump_daily_log",
+        "REQUEST_LOG": "fetch_entire_log",
+    }
+}
 
 
 def generate_block(genesis=True):
@@ -44,8 +59,8 @@ def generate_txns(R, l):
     Returns randomly generated tuple of txns with
     day R, l(seq of txn) and tx (hash id)
     """
+    # uuid.uuid4().hex
     return (R, l, random.getrandbits(128))
-    uuid.uuid4().hex
 
 
 # def genkey():
@@ -63,13 +78,6 @@ class DailyOffChainConsensus(object):
 
 class NodeBFT(Node):
     '''
-    @types:
-    committee member
-    committee non-member
-
-    @state:
-    corrup, honest(pre-corrupt, honest)
-
     '''
     R = 0
     LOGs = defaultdict(list)
@@ -79,10 +87,22 @@ class NodeBFT(Node):
 
     def __init__(self, id=None, type=None):
         self.NodeId = id
-        self._type = 'BFTmember'
+        self.isBFTNode = True
         self.new_row = namedtuple('row', ['R', 'l', 'txn'])
         # TODO: maybe use ctypes.Structure or struct.Struct ?
         self.nonce = 0
+
+    @property
+    def describe(self):
+        return json.dumps({
+            "R": self.R,
+            "csize": self.csize,
+            "BFT Member?": self.isBFTNode,
+            "processing nonce?": self.nonce,
+        })
+
+    def __str__(self):
+        return self.describe
 
     def launch_boot_nodes(self):
         return
@@ -91,49 +111,73 @@ class NodeBFT(Node):
         return
 
 
-class ViewChangeInit(object):
-    '''
-    '''
-
-    def __init__(self):
-        self.timeout = 300 # seconds? load from config
-
-    def check_for_timeout(self, start):
-        current = time.time()
-        if current - start >= self.timeout:
-            return True
-        return False
-
-
 class BFTcommittee(object):
     '''
+    member types:
+    committee member
+    committee non-member
+
+    member states:
+    corrup, honest(pre-corrupt, honest)
     '''
 
     def __init__(self, R, view, node_addresses):
         self.committee_id = R
         self.view = view
         self.nodes = node_addresses
+        self.timeout = 300 # seconds? load from config
+        self.timeout_viewchange = 300
         self.log = []
-        # TODO: calculate csize and sec_param
-        sefl.chain_size = R * csize + LAMBDA
 
-    def call_to_viewchange(self):
+    @property
+    def is_empty(self):
+        if len(self.nodes) is 0:
+            return True
+        return False
+
+    def handle_timeout(self, start, timeout_limit):
+        current = time.time()
+        if current - start >= timeout_limit:
+            return True
+        return False
+
+    def wait_for_reply(self, start, context):
+        gossiped = False
+        while not gossiped:
+            gossiped = self.gossip_to_snailchain(context)
+            if self.handle_timeout(start, self.timeout_viewchange):
+                return False            
+        return True
+
+    def call_to_viewchange(self, context):
         """
         complains to snailchain, init viewchange
         """
-        VC = ViewChangeInit(self.nodes)
-        response = None
         start = time.time()
-        while true:
-            response = VC.wait_for_reply()
-            if response is not None:
+        response = None
+        total = 0
+        # TODO: derive timer logic from node.py
+        # request_timer = Timer(self.timeout, self.handle_timeout, [req.dig, req.inner.view])
+        # request_timer.daemon = True
+
+        # TODO: handle timeout
+        while True:
+            response = self.wait_for_reply(start, context)
+            # TODO: something like go routine to handle_timeout()
+            if response is False:
+                return False
+            else:
+                total = time.time() - start
+                _logger.info("Total time taken for view change: %s" % total)
+                return True
+            if self.handle_timeout(start, self.timeout_viewchange):
                 break
         return
 
-    def sign_transaction(self, txn_tuple):
+    def sign_transaction(self, txn_tuple, from_node_id):
         """
         """
-        key = get_asymm_key(self.id, ktype="sign")
+        key = sig.get_asymm_key(from_node_id, ktype="sign")
         signed_txn = sig.sign(key, txn_tuple)
         return signed_txn
 
@@ -159,8 +203,8 @@ class BFTcommittee(object):
         """
         return sig.generate_keys()
 
-    def sign_log(self):
-        key = get_asymm_key(self.id, ktype="sign")
+    def sign_log(self, from_node_id):
+        key = sig.get_asymm_key(from_node_id, ktype="sign")
         # TODO: handle conversation of log to bytes (use struct?)
         signed_log = sig.sign(key, self.log)
         return signed_log
@@ -168,9 +212,12 @@ class BFTcommittee(object):
     def append_to_log(self, txn_tuple):
         self.log.append(txn_tuple)
 
-    def gossip_to_snailchain(self):
+    def gossip_to_snailchain(self, context):
         """
         use UDP protocol / P2P to gossip to chain
+
+        @context types:
+            - VIEW_CHANGE - call for view change
         """
         pass
 

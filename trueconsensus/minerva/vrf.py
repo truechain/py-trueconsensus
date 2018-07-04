@@ -1,4 +1,4 @@
-from fastchain.config import IP_LIST, config_yaml
+from trueconsensus.fastchain.config import IP_LIST, config_yaml
 
 
 class VariableDayLengthFrequency(object):

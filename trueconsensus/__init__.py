@@ -2,8 +2,8 @@
 # PACKAGES
 ###########################################################
 
-from snailchain import *
-from fastchain import *
+from trueconsensus.snailchain import *
+from trueconsensus.fastchain import *
 
 # explicitly import all top-level modules (ensuring
 # they override the same names inadvertently imported
